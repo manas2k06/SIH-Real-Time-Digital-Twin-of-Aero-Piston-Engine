@@ -49,6 +49,9 @@ Trained model files and checkpoints
 Training outputs
 
 runs/
+models/
+notebooks/
+tests/
 wandb/
 mlruns/
 
