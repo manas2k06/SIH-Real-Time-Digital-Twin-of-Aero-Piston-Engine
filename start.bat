@@ -41,8 +41,11 @@ echo [INFO] Launching AeroTwin Real-Time Digital Twin dev server...
 echo [INFO] Opening dashboard in your default browser at http://localhost:3000/
 echo.
 
-:: Start Vite dev server and automatically launch default browser
-call npm run dev -- --open
+:: Automatically launch default browser at http://localhost:3000/
+start /min "" cmd /c "timeout /t 2 /nobreak >nul 2>&1 || ping -n 3 127.0.0.1 >nul & start http://localhost:3000/"
+
+:: Start Vite dev server
+call npm run dev
 
 if %ERRORLEVEL% NEQ 0 (
     echo.

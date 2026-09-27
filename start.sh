@@ -36,4 +36,7 @@ echo "[INFO] Launching AeroTwin dev server..."
 echo "[INFO] Opening dashboard in your default browser at http://localhost:3000/"
 echo ""
 
-npm run dev -- --open
+# Automatically launch default browser at http://localhost:3000/
+(sleep 2 && (command -v xdg-open >/dev/null 2>&1 && xdg-open http://localhost:3000/ || command -v open >/dev/null 2>&1 && open http://localhost:3000/)) >/dev/null 2>&1 &
+
+npm run dev
