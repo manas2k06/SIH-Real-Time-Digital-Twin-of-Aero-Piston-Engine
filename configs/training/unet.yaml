@@ -1,0 +1,40 @@
+experiment:
+  name: "unet_baseline"
+  description: "Standard 4-level U-Net for binary canopy semantic segmentation"
+
+model:
+  in_channels: 3
+  out_channels: 1
+  base_channels: 32
+  bilinear: false
+
+data:
+  image_size: [512, 512]
+  train_image_dir: "data/processed/unet_canopy/train/images"
+  train_mask_dir: "data/processed/unet_canopy/train/masks"
+  val_image_dir: "data/processed/unet_canopy/val/images"
+  val_mask_dir: "data/processed/unet_canopy/val/masks"
+
+training:
+  epochs: 50
+  batch_size: 4
+  num_workers: 2
+  learning_rate: 0.001
+  min_lr: 0.00001
+  weight_decay: 0.0001
+  optimizer: "AdamW"
+  scheduler: "CosineAnnealingLR"
+  amp: true
+  gradient_clip: 1.0
+  device: "cuda:0"
+
+loss:
+  type: "BCEDiceLoss"
+  bce_weight: 0.5
+  dice_weight: 0.5
+  smooth: 1.0e-6
+
+checkpoint:
+  save_dir: "runs/unet/baseline"
+  save_best_metric: "iou"
+  save_frequency_epochs: 10

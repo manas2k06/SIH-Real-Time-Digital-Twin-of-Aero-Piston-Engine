@@ -1,0 +1,62 @@
+# GreenVision AI: YOLOv8n-Seg Tree Crown Instance Segmentation Training Configuration
+# Target Hardware: ASUS TUF A15, NVIDIA RTX 3050 (4 GB VRAM), 16 GB RAM, Windows 11
+
+# ==============================================================================
+# 1. Dataset & Task Definition
+# ==============================================================================
+task: segment
+mode: train
+model: yolov8n-seg.pt                          # Model architecture (nano instance segmentation)
+data: C:/GreenVision-AI/data/processed/yolo_bamforests/dataset.yaml  # Path to dataset YAML
+
+# ==============================================================================
+# 2. Hardware-Sensitive Resource Parameters (RTX 3050 4 GB VRAM Guardrails)
+# ==============================================================================
+device: 0                                      # GPU device index (0 for single RTX 3050)
+imgsz: 512                                     # Input patch resolution (512x512 to preserve VRAM)
+batch: 4                                       # Batch size (tuned for 4GB VRAM safety margin)
+amp: true                                      # Automatic Mixed Precision (FP16) enabled
+workers: 2                                     # DataLoader workers (2 recommended on Windows)
+cache: false                                   # Do not cache uncompressed images in RAM (16 GB limit)
+
+# ==============================================================================
+# 3. Training & Hyperparameters
+# ==============================================================================
+epochs: 50                                     # Target training epochs
+patience: 15                                   # Early stopping patience
+optimizer: auto                                # SGD or AdamW automatically selected by Ultralytics
+lr0: 0.01                                      # Initial learning rate
+lrf: 0.01                                      # Final learning rate ratio
+momentum: 0.937                                # SGD momentum / Adam beta1
+weight_decay: 0.0005                           # Optimizer weight decay
+warmup_epochs: 3.0                             # Warmup epochs
+warmup_momentum: 0.8                           # Warmup initial momentum
+warmup_bias_lr: 0.1                            # Warmup initial bias lr
+
+# ==============================================================================
+# 4. Data Augmentation (Tuned for Aerial/UAV Tree Crowns)
+# ==============================================================================
+hsv_h: 0.015                                   # Image HSV-Hue augmentation
+hsv_s: 0.7                                     # Image HSV-Saturation augmentation
+hsv_v: 0.4                                     # Image HSV-Value augmentation
+degrees: 180.0                                 # Full 360-degree rotation (nadir aerial invariance)
+translate: 0.1                                 # Translation fraction
+scale: 0.5                                     # Image scale gain
+shear: 0.0                                     # Shear angle
+perspective: 0.0                               # Perspective distortion (disabled for ortho imagery)
+flipud: 0.5                                    # Vertical flip probability
+fliplr: 0.5                                    # Horizontal flip probability
+mosaic: 1.0                                    # Mosaic augmentation
+mixup: 0.1                                     # Mixup augmentation
+
+# ==============================================================================
+# 5. Checkpointing, Logging & Storage Management
+# ==============================================================================
+project: C:/GreenVision-AI/runs/yolo_tree_seg  # Experiment root on external storage
+name: bamforests_baseline_exp01                # Run identifier
+save: true                                     # Save checkpoint artifacts
+save_period: 5                                 # Save periodic checkpoint every N epochs
+exist_ok: false                                # Do not overwrite existing experiment folders
+plots: true                                    # Save training curves and PR curves
+verbose: true                                  # Verbose console logging
+resume: false                                  # Set true to resume from last.pt

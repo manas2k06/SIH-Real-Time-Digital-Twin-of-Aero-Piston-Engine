@@ -1,0 +1,65 @@
+[
+  {
+    "dataset": "NeonTreeEvaluation",
+    "role": "Object Detection Benchmark (YOLOv8-Detect)",
+    "imagery_dim": [
+      400,
+      400,
+      3
+    ],
+    "annotation_type": "2D Bounding Box",
+    "has_genuine_polygons": false,
+    "instance_count": 61,
+    "decision": "APPROVED FOR DETECTION ONLY (REJECTED FOR YOLOv8-SEG)"
+  },
+  {
+    "dataset": "BAMFORESTS",
+    "role": "Primary YOLOv8n-Seg Instance Segmentation Target",
+    "imagery_dim": [
+      1024,
+      1024,
+      3
+    ],
+    "annotation_type": "COCO Instance Polygons",
+    "has_genuine_polygons": true,
+    "max_reconstruction_error_px": 0.0006399999999871398,
+    "decision": "APPROVED"
+  },
+  {
+    "dataset": "LandCover.ai",
+    "role": "U-Net Woodland Semantic Segmentation Target",
+    "imagery_dim": [
+      512,
+      512,
+      3
+    ],
+    "mask_dim": [
+      512,
+      512,
+      1
+    ],
+    "class_ids": [
+      0,
+      1,
+      2,
+      4
+    ],
+    "woodland_coverage_pct": 16.977691650390625,
+    "decision": "APPROVED"
+  },
+  {
+    "dataset": "USDA NAIP 4-Band",
+    "role": "Deterministic NDVI & 4-Band Health Engine",
+    "channels": 4,
+    "band_ordering": [
+      "Red",
+      "Green",
+      "Blue",
+      "NIR"
+    ],
+    "canopy_ndvi_mean": 0.6956520080566406,
+    "water_ndvi_mean": -0.7142857909202576,
+    "zero_denom_handled": true,
+    "decision": "APPROVED"
+  }
+]

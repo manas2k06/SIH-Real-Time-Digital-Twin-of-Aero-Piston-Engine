@@ -60,3 +60,16 @@ Temporary files
 
 tmp/
 temp/
+
+# Node & Web Build Artifacts
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+.vite/
+**/.vite/
+.next/
+**/.next/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
