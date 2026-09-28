@@ -83,15 +83,14 @@ export function computeAIPredictions(
   const rpms = propulsion.motors.map((m) => m.rpm);
   const avgRpm = rpms.reduce((a, b) => a + b, 0) / 4;
   const maxRpmDiff = Math.max(...rpms.map((r) => Math.abs(r - avgRpm)));
-  const motorFaultActive = activeFaults.some((f) => f.type.startsWith('MOTOR'));
 
   let motorSeverity: AnomalySeverity = 'NORMAL';
   let motorScore = 0.04;
   let motorDesc = 'All 4 propulsion units operating symmetrically within nominal torque limits.';
-  if (motorFaultActive || maxRpmDiff > 1200) {
+  if (maxRpmDiff > 1200) {
     motorSeverity = 'CRITICAL';
     motorScore = 0.94;
-    motorDesc = 'Severe thrust asymmetry detected. Motor 3 RPM deviation exceeds safety envelope.';
+    motorDesc = 'Severe thrust asymmetry detected. Motor RPM deviation exceeds safety envelope.';
   } else if (maxRpmDiff > 500) {
     motorSeverity = 'WARNING';
     motorScore = 0.62;
@@ -111,11 +110,10 @@ export function computeAIPredictions(
   });
 
   // Battery System Anomaly
-  const battFaultActive = activeFaults.some((f) => f.type === 'BATTERY_SAG');
   let battSeverity: AnomalySeverity = 'NORMAL';
   let battScore = 0.06;
   let battDesc = '6S Cell voltages balanced; internal impedance and discharge rate nominal.';
-  if (battFaultActive || battery.temperature > 50 || battery.voltage < 21.0) {
+  if (battery.temperature > 50 || battery.voltage < 21.0) {
     battSeverity = 'CRITICAL';
     battScore = 0.88;
     battDesc = 'Cell sag / abnormal voltage drop under load. Rapid thermal rise detected.';
@@ -164,11 +162,10 @@ export function computeAIPredictions(
   });
 
   // Vibration / Aero Anomaly
-  const highWindFault = activeFaults.some((f) => f.type === 'SEVERE_WIND_SHEAR');
   let aeroSeverity: AnomalySeverity = 'NORMAL';
   let aeroScore = 0.08;
   let aeroDesc = 'Frame acceleration RMS and harmonic vibration levels within 0.15G nominal baseline.';
-  if (highWindFault || environment.windSpeed > 15) {
+  if (environment.windSpeed > 15) {
     aeroSeverity = 'WARNING';
     aeroScore = 0.74;
     aeroDesc = 'Turbulence-induced frame buffeting and crosswind roll torque compensation.';
@@ -186,17 +183,14 @@ export function computeAIPredictions(
   });
 
   // Sensor Integrity Anomaly
-  const gpsFault = activeFaults.some((f) => f.type === 'GPS_SIGNAL_LOSS');
-  const baroFault = activeFaults.some((f) => f.type === 'BAROMETER_DRIFT');
-  const imuFault = activeFaults.some((f) => f.type === 'IMU_SENSOR_NOISE');
   let sensorSeverity: AnomalySeverity = 'NORMAL';
   let sensorScore = 0.03;
   let sensorDesc = 'EKF state estimation converged with full GPS/IMU/Baro multi-sensor redundancy.';
-  if (gpsFault) {
+  if (sensors.gps.satelliteCount < 4 || sensors.gps.hdop > 5.0) {
     sensorSeverity = 'CRITICAL';
     sensorScore = 0.95;
-    sensorDesc = 'GPS lock lost (0 satellites). EKF falling back to dead-reckoning / optical flow.';
-  } else if (baroFault || imuFault) {
+    sensorDesc = 'GPS lock lost (< 4 satellites). EKF falling back to dead-reckoning / optical flow.';
+  } else if (sensors.gps.hdop > 1.8) {
     sensorSeverity = 'WARNING';
     sensorScore = 0.65;
     sensorDesc = 'Sensor innovation residual variance elevated in vertical altitude state.';
@@ -220,7 +214,7 @@ export function computeAIPredictions(
   let stabSeverity: AnomalySeverity = 'NORMAL';
   let stabScore = 0.04;
   let stabDesc = 'Attitude tracking error within ±2.5° envelope; PID damping optimal.';
-  if (rollErr > 15 || pitchErr > 15 || motorSeverity === 'CRITICAL') {
+  if (rollErr > 15 || pitchErr > 15) {
     stabSeverity = 'CRITICAL';
     stabScore = 0.92;
     stabDesc = 'Attitude control margin degraded. Dynamic instability risk detected.';
@@ -243,20 +237,24 @@ export function computeAIPredictions(
 
   // Aero-Piston Engine Thermodynamic Core Anomaly
   const engOverheating = activeFaults.some((f) => f.type === 'ENGINE_OVERHEATING');
+  const coolantRise = activeFaults.some((f) => f.type === 'COOLANT_TEMP_RISE');
+  const reducedFlow = activeFaults.some((f) => f.type === 'REDUCED_COOLANT_FLOW');
   const cylMisfire = activeFaults.some((f) => f.type === 'CYLINDER_MISFIRE');
   const chtAvg = engine ? engine.combustion.cht.average : 108.5;
   const chtMaxDev = engine ? engine.combustion.cht.maxDeviation : 3.0;
   let thermoSeverity: AnomalySeverity = 'NORMAL';
   let thermoScore = 0.05;
   let thermoDesc = 'Cylinder head and exhaust gas temperatures balanced within stoichiometric envelope.';
-  if (engOverheating || chtAvg > 130) {
+  if (engOverheating || coolantRise || chtAvg > 130) {
     thermoSeverity = 'CRITICAL';
     thermoScore = 0.96;
     thermoDesc = 'Severe thermodynamic core overheating. Cylinder Head Temperature exceeding 130°C.';
-  } else if (cylMisfire || chtMaxDev > 15) {
+  } else if (reducedFlow || cylMisfire || chtMaxDev > 15) {
     thermoSeverity = 'WARNING';
     thermoScore = 0.68;
-    thermoDesc = 'Cylinder combustion temperature imbalance detected; possible misfire or uneven fuel delivery.';
+    thermoDesc = reducedFlow
+      ? 'Coolant circulation flow restriction; cylinder head thermal gradient divergence.'
+      : 'Cylinder combustion temperature imbalance detected; possible misfire or uneven fuel delivery.';
   }
 
   subsystems.push({
@@ -273,19 +271,23 @@ export function computeAIPredictions(
 
   // Lubrication & Mechanical Circuit Anomaly
   const oilPressureLoss = activeFaults.some((f) => f.type === 'OIL_PRESSURE_LOSS');
+  const highOilTemp = activeFaults.some((f) => f.type === 'HIGH_OIL_TEMP');
+  const oilDegrade = activeFaults.some((f) => f.type === 'OIL_SYSTEM_DEGRADATION');
   const oilPress = engine ? engine.lubrication.oilPressure : 4.2;
   const oilTemp = engine ? engine.lubrication.oilTemperature : 92.4;
   let lubSeverity: AnomalySeverity = 'NORMAL';
   let lubScore = 0.04;
   let lubDesc = 'Dry-sump lubrication pressure and scavenge flow nominal with clean magnetic chip readings.';
-  if (oilPressureLoss || oilPress < 1.8) {
+  if (oilPressureLoss || oilPress < 1.8 || highOilTemp) {
     lubSeverity = 'CRITICAL';
     lubScore = 0.95;
-    lubDesc = 'Loss of oil pressure detected. Hydrodynamic bearing film breakdown hazard.';
-  } else if (oilTemp > 115 || oilPress < 2.5) {
+    lubDesc = oilPressureLoss
+      ? 'Loss of oil pressure detected. Hydrodynamic bearing film breakdown hazard.'
+      : 'Oil temperature exceeds 130°C redline; thermal breakdown and viscosity collapse.';
+  } else if (oilDegrade || oilTemp > 115 || oilPress < 2.5) {
     lubSeverity = 'WARNING';
     lubScore = 0.62;
-    lubDesc = 'Elevated oil circuit temperature or marginal scavenge return pressure.';
+    lubDesc = 'Elevated oil circuit temperature or scavenge aeration / chip detector warning.';
   }
 
   subsystems.push({
@@ -297,6 +299,201 @@ export function computeAIPredictions(
       { feature: 'oil_manifold_pressure', importance: 0.50, actualValue: `${oilPress.toFixed(2)} bar`, expectedRange: '2.0 - 5.0 bar' },
       { feature: 'oil_gallery_temp', importance: 0.32, actualValue: `${oilTemp.toFixed(1)} °C`, expectedRange: '80 - 110 °C' },
       { feature: 'scavenge_flow_rate', importance: 0.18, actualValue: `${(engine ? engine.lubrication.oilFlowRate : 6.8).toFixed(1)} L/min`, expectedRange: '5.0 - 8.5 L/min' },
+    ],
+  });
+
+  // Turbo Induction & TCU Anomaly
+  const isWastegateFault = activeFaults.some((f) => f.type === 'TURBO_WASTEGATE_STUCK');
+  const isTcuFault = activeFaults.some((f) => f.type === 'TCU_FAULT');
+  const isOverboost = activeFaults.some((f) => f.type === 'TURBO_OVERBOOST');
+  const isTurboDegrade = activeFaults.some((f) => f.type === 'TURBO_DEGRADATION');
+  const boostBar = engine ? engine.turbocharger.turbocharger.boostPressureBar : 0.22;
+  const tcuStatus = engine ? engine.turbocharger.tcu.status : 'ONLINE';
+  let turboSeverity: AnomalySeverity = 'NORMAL';
+  let turboScore = 0.04;
+  let turboDesc = 'TCU automatic wastegate servo control holding manifold boost at stoichiometric reference.';
+  if (isOverboost) {
+    turboSeverity = 'CRITICAL';
+    turboScore = 0.97;
+    turboDesc = 'Manifold overboost detected (MAP > 39.9 inHg). Wastegate jammed closed, manifold overpressure hazard.';
+  } else if (isWastegateFault || isTcuFault || tcuStatus === 'FAULT') {
+    turboSeverity = 'CRITICAL';
+    turboScore = 0.94;
+    turboDesc = 'Wastegate control loss or TCU servo fault. Boost pressure collapsed to atmospheric vacuum.';
+  } else if (isTurboDegrade || (boostBar < 0.10 && (engine?.operating.engineLoad ?? 0) > 70)) {
+    turboSeverity = 'WARNING';
+    turboScore = 0.58;
+    turboDesc = 'Underboost condition or compressor aerodynamic drag during high-load profile.';
+  }
+
+  subsystems.push({
+    subsystem: 'Turbo Induction',
+    severity: turboSeverity,
+    score: turboScore,
+    description: turboDesc,
+    contributingFeatures: [
+      { feature: 'boost_pressure_bar', importance: 0.48, actualValue: `${boostBar.toFixed(2)} bar`, expectedRange: '0.18 - 0.35 bar' },
+      { feature: 'wastegate_pos_pct', importance: 0.34, actualValue: `${engine?.turbocharger.wastegate.position ?? 55}%`, expectedRange: '15 - 90%' },
+      { feature: 'tcu_servo_tracking', importance: 0.18, actualValue: tcuStatus, expectedRange: 'ONLINE' },
+    ],
+  });
+
+  // Fuel Delivery & Carburetor Balance Anomaly
+  const isFuelLeak = activeFaults.some((f) => f.type === 'FUEL_SYSTEM_LEAK');
+  const isPump1Fail = activeFaults.some((f) => f.type === 'FUEL_PUMP_1_FAILURE');
+  const isPump2Fail = activeFaults.some((f) => f.type === 'FUEL_PUMP_2_FAILURE');
+  const isCarbImbalance = activeFaults.some((f) => f.type === 'CARBURETOR_IMBALANCE');
+  const fuelPress = engine ? engine.fuel_system.fuelPressure : 3.2;
+  const carbBalance = engine ? engine.carburetors.balance : 98.8;
+  let fuelSeverity: AnomalySeverity = 'NORMAL';
+  let fuelScore = 0.04;
+  let fuelDesc = 'Twin Bing 64 constant-depression carburetors synchronized; fuel regulator maintaining airbox+0.25 bar.';
+  if (isFuelLeak || fuelPress < 2.0) {
+    fuelSeverity = 'CRITICAL';
+    fuelScore = 0.96;
+    fuelDesc = 'Fuel delivery pressure loss or regulator diaphragm rupture hazard.';
+  } else if (isPump1Fail || isPump2Fail || isCarbImbalance || carbBalance < 88) {
+    fuelSeverity = 'WARNING';
+    fuelScore = 0.64;
+    fuelDesc = isPump1Fail
+      ? 'Primary fuel pump 1 trip; redundant standby fuel pump 2 carrying full bus flow.'
+      : isPump2Fail
+      ? 'Auxiliary fuel pump 2 electrical trip; redundancy lost.'
+      : 'Bing 64 carburetors vacuum synchronization skew detected between cylinder banks.';
+  }
+
+  subsystems.push({
+    subsystem: 'Fuel Delivery & Carburetors',
+    severity: fuelSeverity,
+    score: fuelScore,
+    description: fuelDesc,
+    contributingFeatures: [
+      { feature: 'fuel_regulator_delta_bar', importance: 0.45, actualValue: `${(engine?.fuel_system.fuelPressureDeltaOverAirbox ?? 0.25).toFixed(2)} bar`, expectedRange: '0.20 - 0.30 bar' },
+      { feature: 'bing64_carb_balance', importance: 0.35, actualValue: `${carbBalance.toFixed(1)}%`, expectedRange: '> 92.0%' },
+      { feature: 'pump_operational_redundancy', importance: 0.20, actualValue: isPump1Fail ? 'P2 ONLY' : 'P1+P2 OK', expectedRange: 'P1 ACTIVE' },
+    ],
+  });
+
+  // Propeller Reduction Gearbox Anomaly
+  const isGearboxVib = activeFaults.some((f) => f.type === 'GEARBOX_VIBRATION');
+  const isGearboxOverheat = activeFaults.some((f) => f.type === 'GEARBOX_TEMP_INCREASE');
+  const isBearingDegrade = activeFaults.some((f) => f.type === 'BEARING_DEGRADATION');
+  const isVibAnomaly = activeFaults.some((f) => f.type === 'VIBRATION_ANOMALY');
+  const gbVib = engine ? engine.gearbox.gearbox_vibration : 1.8;
+  const gbTemp = engine ? engine.gearbox.gearbox_temperature : 78.5;
+  let gbSeverity: AnomalySeverity = 'NORMAL';
+  let gbScore = 0.04;
+  let gbDesc = 'Propeller speed reduction gearbox (2.43:1) dog clutch engagement and casing harmonics nominal.';
+  if (isGearboxVib || isBearingDegrade || gbVib > 5.5) {
+    gbSeverity = 'CRITICAL';
+    gbScore = 0.93;
+    gbDesc = isBearingDegrade
+      ? 'Crankshaft journal bearing hydrodynamic film wear; 1X mechanical harmonic surge.'
+      : 'Severe gearbox vibration harmonic flutter detected; overload clutch slippage or tooth mesh wear.';
+  } else if (isGearboxOverheat || isVibAnomaly || gbTemp > 100 || gbVib > 3.5) {
+    gbSeverity = 'WARNING';
+    gbScore = 0.60;
+    gbDesc = 'Elevated gearbox casing temperature or abnormal torsional resonance.';
+  }
+
+  subsystems.push({
+    subsystem: 'Reduction Gearbox & Prop',
+    severity: gbSeverity,
+    score: gbScore,
+    description: gbDesc,
+    contributingFeatures: [
+      { feature: 'gearbox_vibration_rms', importance: 0.52, actualValue: `${gbVib.toFixed(2)} mm/s`, expectedRange: '< 2.50 mm/s' },
+      { feature: 'gearbox_casing_temp', importance: 0.30, actualValue: `${gbTemp.toFixed(1)} °C`, expectedRange: '< 95.0 °C' },
+      { feature: 'reduction_ratio_sync', importance: 0.18, actualValue: '2.42857 : 1', expectedRange: '2.43 : 1' },
+    ],
+  });
+
+  // Dual Ducati CDI Ignition System Anomaly
+  const isIgnAFail = activeFaults.some((f) => f.type === 'IGNITION_A_FAILURE');
+  const isIgnBFail = activeFaults.some((f) => f.type === 'IGNITION_B_FAILURE');
+  const ignConsistency = engine ? engine.ignition.dualIgnitionConsistency : 99.4;
+  let ignSeverity: AnomalySeverity = 'NORMAL';
+  let ignScore = 0.03;
+  let ignDesc = 'Dual electronic CDI ignition circuits A & B fully firing with 26° BTDC advance.';
+  if (isIgnAFail || isIgnBFail || (engine?.ignition.dualIgnitionState !== 'BOTH_ACTIVE')) {
+    ignSeverity = 'WARNING';
+    ignScore = 0.72;
+    ignDesc = isIgnAFail
+      ? 'Ignition Circuit A loss; operating on single circuit B with engine RPM droop.'
+      : 'Ignition Circuit B loss; operating on single circuit A with engine RPM droop.';
+  } else if (cylMisfire) {
+    ignSeverity = 'CRITICAL';
+    ignScore = 0.90;
+    ignDesc = 'Dual CDI spark failure on cylinder 3 causing misfire and unburnt hydrocarbon buildup.';
+  }
+
+  subsystems.push({
+    subsystem: 'Ignition System',
+    severity: ignSeverity,
+    score: ignScore,
+    description: ignDesc,
+    contributingFeatures: [
+      { feature: 'dual_cdi_consistency', importance: 0.50, actualValue: `${ignConsistency.toFixed(1)}%`, expectedRange: '> 95.0%' },
+      { feature: 'spark_status_circuit_a', importance: 0.30, actualValue: isIgnAFail ? 'FAULT' : 'ACTIVE', expectedRange: 'ACTIVE' },
+      { feature: 'timing_advance_deg', importance: 0.20, actualValue: `${(engine?.ignition.ignitionTiming ?? 26.0).toFixed(1)}° BTDC`, expectedRange: '22 - 28° BTDC' },
+    ],
+  });
+
+  // Exhaust System & Gas Path Anomaly
+  const isExhaustRestrict = activeFaults.some((f) => f.type === 'EXHAUST_RESTRICTION');
+  const isEgtImbalance = activeFaults.some((f) => f.type === 'CYLINDER_EGT_IMBALANCE');
+  let exhSeverity: AnomalySeverity = 'NORMAL';
+  let exhScore = 0.04;
+  let exhDesc = 'Exhaust collector backpressure and cylinder gas path temperatures nominal.';
+  if (isExhaustRestrict || (engine?.exhaust.egtAverage ?? 0) > 940) {
+    exhSeverity = 'CRITICAL';
+    exhScore = 0.95;
+    exhDesc = 'Pre-turbine exhaust restriction; EGT exceeding 950°C redline with severe power choke.';
+  } else if (isEgtImbalance || (engine?.exhaust.egtMaxDeviation ?? 0) > 75) {
+    exhSeverity = 'WARNING';
+    exhScore = 0.65;
+    exhDesc = 'Cylinder bank EGT spread exceeding 85°C; mixture skew or dirty jetting.';
+  }
+
+  subsystems.push({
+    subsystem: 'Exhaust System',
+    severity: exhSeverity,
+    score: exhScore,
+    description: exhDesc,
+    contributingFeatures: [
+      { feature: 'egt_average_c', importance: 0.52, actualValue: `${(engine?.exhaust.egtAverage ?? 760)} °C`, expectedRange: '< 880 °C' },
+      { feature: 'egt_bank_spread', importance: 0.32, actualValue: `Δ ${(engine?.exhaust.egtMaxDeviation ?? 25)} °C`, expectedRange: '< 45 °C' },
+      { feature: 'exhaust_backpressure', importance: 0.16, actualValue: `${(engine?.exhaust.exhaustPressure ?? 1.25).toFixed(2)} bar`, expectedRange: '< 1.45 bar' },
+    ],
+  });
+
+  // Electrical & Generation Anomaly
+  const isGenFail = activeFaults.some((f) => f.type === 'GENERATOR_FAILURE');
+  const isAltFail = activeFaults.some((f) => f.type === 'ALTERNATOR_FAILURE');
+  let elecSeverity: AnomalySeverity = 'NORMAL';
+  let elecScore = 0.03;
+  let elecDesc = 'Integrated 250W AC generator and 28V alternator supplying full avionics load.';
+  if (isGenFail && isAltFail) {
+    elecSeverity = 'CRITICAL';
+    elecScore = 0.94;
+    elecDesc = 'Total generation loss; aircraft avionics and TCU operating on buffer battery drain.';
+  } else if (isGenFail || isAltFail) {
+    elecSeverity = 'WARNING';
+    elecScore = 0.65;
+    elecDesc = isGenFail
+      ? 'Integrated 250W AC generator cutout; alternator carrying primary electrical bus.'
+      : 'External 40A alternator regulator dropout; bus voltage sagged to buffer level.';
+  }
+
+  subsystems.push({
+    subsystem: 'Electrical System',
+    severity: elecSeverity,
+    score: elecScore,
+    description: elecDesc,
+    contributingFeatures: [
+      { feature: 'dc_bus_voltage', importance: 0.48, actualValue: `${(engine?.electrical.batteryVoltage ?? 28.4).toFixed(1)} V`, expectedRange: '27.5 - 28.8 V' },
+      { feature: 'generator_power_w', importance: 0.32, actualValue: `${(engine?.electrical.integratedGeneratorPowerW ?? 220)} W`, expectedRange: '> 180 W' },
+      { feature: 'alternator_status', importance: 0.20, actualValue: isAltFail ? 'FAULT' : 'ACTIVE', expectedRange: 'ACTIVE' },
     ],
   });
 
@@ -316,26 +513,23 @@ export function computeAIPredictions(
   };
 
   // 3. Compute Remaining Useful Life (RUL) & Airworthiness Degradation Curves
-  const isM3Fault = activeFaults.some((f) => f.type.startsWith('MOTOR'));
-  const isBattFault = activeFaults.some((f) => f.type === 'BATTERY_SAG');
-
   // Battery RUL
-  const battCyclesRemaining = isBattFault ? 142 : Math.round(380 - (100 - battery.percentage) * 0.2);
-  const battHealth = isBattFault ? 35 : Math.round((battCyclesRemaining / 500) * 100);
-  const battStatus: RULStatus = isBattFault ? 'CRITICAL' : battery.temperature > 45 ? 'MONITOR' : 'NOMINAL';
-  const battTrend: RULTrend = isBattFault ? 'ACCELERATING' : 'STABLE';
+  const battCyclesRemaining = Math.round(380 - (100 - battery.percentage) * 0.2);
+  const battHealth = Math.round((battCyclesRemaining / 500) * 100);
+  const battStatus: RULStatus = battery.temperature > 45 ? 'MONITOR' : 'NOMINAL';
+  const battTrend: RULTrend = 'STABLE';
 
   // Motor 3 RUL
-  const m3Rul = isM3Fault ? 118.5 : 312.0;
-  const m3Health = isM3Fault ? 29 : 78;
-  const m3Status: RULStatus = isM3Fault ? 'CRITICAL' : 'NOMINAL';
-  const m3Trend: RULTrend = isM3Fault ? 'ACCELERATING' : 'STABLE';
+  const m3Rul = 312.0;
+  const m3Health = 78;
+  const m3Status: RULStatus = 'NOMINAL';
+  const m3Trend: RULTrend = 'STABLE';
 
   // ESC 3 RUL
-  const esc3Rul = isM3Fault ? 210.0 : 495.0;
-  const esc3Health = isM3Fault ? 42 : 82;
-  const esc3Status: RULStatus = isM3Fault ? 'MONITOR' : 'NOMINAL';
-  const esc3Trend: RULTrend = isM3Fault ? 'DEGRADING' : 'STABLE';
+  const esc3Rul = 495.0;
+  const esc3Health = 82;
+  const esc3Status: RULStatus = 'NOMINAL';
+  const esc3Trend: RULTrend = 'STABLE';
 
   const components: ComponentRUL[] = [
     {
@@ -403,6 +597,102 @@ export function computeAIPredictions(
       isSimulatedPrediction: true,
     },
     {
+      id: 'rotax-gearbox',
+      name: 'Propeller Reduction Gearbox (2.43:1)',
+      subsystem: 'Reduction Gearbox',
+      rulValue: isGearboxVib ? 45.0 : 580.0,
+      rulUnit: 'hours',
+      nominalLife: 2000,
+      healthPercent: isGearboxVib ? 42 : 96,
+      status: isGearboxVib ? 'CRITICAL' : 'NOMINAL',
+      degradationRate: isGearboxVib ? 8.5 : 0.5,
+      trend: isGearboxVib ? 'ACCELERATING' : 'STABLE',
+      sparkline: isGearboxVib ? [96, 85, 70, 55, 42, 30, 22, 18] : [99, 98, 98, 97, 97, 96, 96, 95],
+      stressFactor: isGearboxVib ? 'Dog clutch overload flutter' : 'Nominal helical gear meshing',
+      lastMaintenanceHoursAgo: 120.4,
+      isSimulatedPrediction: true,
+    },
+    {
+      id: 'rotax-carburetors',
+      name: 'Twin Bing 64 Carburetors',
+      subsystem: 'Carburetors',
+      rulValue: isCarbImbalance ? 110.0 : 450.0,
+      rulUnit: 'hours',
+      nominalLife: 1000,
+      healthPercent: isCarbImbalance ? 55 : 95,
+      status: isCarbImbalance ? 'MONITOR' : 'NOMINAL',
+      degradationRate: isCarbImbalance ? 2.4 : 0.6,
+      trend: isCarbImbalance ? 'DEGRADING' : 'STABLE',
+      sparkline: [98, 97, 96, 95, 94, 93, 92, 91],
+      stressFactor: isCarbImbalance ? 'Vacuum diaphragm linkage imbalance' : 'Nominal float bowl regulation',
+      lastMaintenanceHoursAgo: 85.0,
+      isSimulatedPrediction: true,
+    },
+    {
+      id: 'rotax-ignition',
+      name: 'Dual Ducati CDI Ignition System',
+      subsystem: 'Ignition System',
+      rulValue: isIgnAFail ? 65.0 : cylMisfire ? 80.0 : 490.0,
+      rulUnit: 'hours',
+      nominalLife: 1000,
+      healthPercent: isIgnAFail ? 22 : cylMisfire ? 62 : 98,
+      status: isIgnAFail ? 'CRITICAL' : cylMisfire ? 'MONITOR' : 'NOMINAL',
+      degradationRate: isIgnAFail ? 7.2 : 0.4,
+      trend: isIgnAFail ? 'ACCELERATING' : 'STABLE',
+      sparkline: [99, 99, 98, 98, 97, 97, 96, 95],
+      stressFactor: isIgnAFail ? 'Circuit A stator coil failure' : 'Nominal high-voltage spark cycling',
+      lastMaintenanceHoursAgo: 85.0,
+      isSimulatedPrediction: true,
+    },
+    {
+      id: 'fuel-pumps',
+      name: 'Dual 12V Electric Fuel Pumps & Regulator',
+      subsystem: 'Fuel System',
+      rulValue: isPump1Fail ? 95.0 : isFuelLeak ? 30.0 : 520.0,
+      rulUnit: 'hours',
+      nominalLife: 1000,
+      healthPercent: isPump1Fail ? 68 : isFuelLeak ? 42 : 96,
+      status: isFuelLeak ? 'CRITICAL' : isPump1Fail ? 'MONITOR' : 'NOMINAL',
+      degradationRate: isFuelLeak ? 8.0 : isPump1Fail ? 3.0 : 0.5,
+      trend: isFuelLeak ? 'ACCELERATING' : 'STABLE',
+      sparkline: [98, 97, 96, 95, 94, 93, 92, 91],
+      stressFactor: isPump1Fail ? 'Primary vane pump motor trip' : 'Airbox + 0.25 bar regulated delivery',
+      lastMaintenanceHoursAgo: 85.0,
+      isSimulatedPrediction: true,
+    },
+    {
+      id: 'cooling-system',
+      name: 'Liquid / Ram-Air Mixed Cooling System',
+      subsystem: 'Cooling System',
+      rulValue: engOverheating ? 15.0 : 490.0,
+      rulUnit: 'hours',
+      nominalLife: 1000,
+      healthPercent: engOverheating ? 45 : 96,
+      status: engOverheating ? 'CRITICAL' : 'NOMINAL',
+      degradationRate: engOverheating ? 6.5 : 0.5,
+      trend: engOverheating ? 'ACCELERATING' : 'STABLE',
+      sparkline: [98, 97, 96, 95, 94, 93, 92, 91],
+      stressFactor: engOverheating ? 'Radiator thermal saturation' : 'Closed-loop expansion tank convection',
+      lastMaintenanceHoursAgo: 120.4,
+      isSimulatedPrediction: true,
+    },
+    {
+      id: 'crankshaft-bearings',
+      name: 'Crankshaft Main & Connecting Bearings',
+      subsystem: 'Bearings',
+      rulValue: oilPressureLoss ? 1.5 : 580.0,
+      rulUnit: 'hours',
+      nominalLife: 2000,
+      healthPercent: oilPressureLoss ? 18 : 94,
+      status: oilPressureLoss ? 'CRITICAL' : 'NOMINAL',
+      degradationRate: oilPressureLoss ? 14.0 : 0.4,
+      trend: oilPressureLoss ? 'ACCELERATING' : 'STABLE',
+      sparkline: [99, 98, 97, 96, 95, 95, 94, 93],
+      stressFactor: oilPressureLoss ? 'Metal-to-metal boundary friction' : 'Hydrodynamic pressurized film',
+      lastMaintenanceHoursAgo: 120.4,
+      isSimulatedPrediction: true,
+    },
+    {
       id: 'batt-6s',
       name: '6S LiPo 10Ah',
       subsystem: 'Battery',
@@ -411,10 +701,10 @@ export function computeAIPredictions(
       nominalLife: 500,
       healthPercent: battHealth,
       status: battStatus,
-      degradationRate: isBattFault ? 3.4 : 0.8,
+      degradationRate: 0.8,
       trend: battTrend,
-      sparkline: isBattFault ? [92, 88, 85, 78, 68, 55, 42, 35] : [98, 96, 95, 93, 91, 89, 87, 85],
-      stressFactor: isBattFault ? 'Cell #3 impedance spike (>18mΩ)' : 'Nominal discharge',
+      sparkline: [98, 96, 95, 93, 91, 89, 87, 85],
+      stressFactor: 'Nominal discharge',
       lastMaintenanceHoursAgo: 24.5,
     },
     {
@@ -456,10 +746,10 @@ export function computeAIPredictions(
       nominalLife: 400,
       healthPercent: m3Health,
       status: m3Status,
-      degradationRate: isM3Fault ? 4.2 : 1.1,
+      degradationRate: 1.1,
       trend: m3Trend,
-      sparkline: isM3Fault ? [86, 82, 75, 64, 52, 41, 33, 29] : [93, 91, 89, 87, 85, 83, 80, 78],
-      stressFactor: isM3Fault ? 'Harmonic vibration & stator heat' : 'Nominal bearing load',
+      sparkline: [93, 91, 89, 87, 85, 83, 80, 78],
+      stressFactor: 'Nominal bearing load',
       lastMaintenanceHoursAgo: 48.0,
     },
     {
@@ -516,10 +806,10 @@ export function computeAIPredictions(
       nominalLife: 600,
       healthPercent: esc3Health,
       status: esc3Status,
-      degradationRate: isM3Fault ? 2.8 : 0.95,
+      degradationRate: 0.95,
       trend: esc3Trend,
-      sparkline: isM3Fault ? [90, 86, 79, 71, 62, 54, 47, 42] : [94, 92, 91, 89, 87, 85, 84, 82],
-      stressFactor: isM3Fault ? 'Phase ripple thermal stress' : 'Nominal FET switching',
+      sparkline: [94, 92, 91, 89, 87, 85, 84, 82],
+      stressFactor: 'Nominal FET switching',
       lastMaintenanceHoursAgo: 72.0,
     },
     {

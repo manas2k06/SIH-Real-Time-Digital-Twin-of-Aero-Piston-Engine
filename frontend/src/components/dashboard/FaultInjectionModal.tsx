@@ -13,102 +13,229 @@ export const FaultInjectionModal: React.FC<FaultInjectionModalProps> = ({ isOpen
 
   if (!isOpen) return null;
 
+  const [selectedCategory, setSelectedCategory] = React.useState<string>('ALL');
+
   const faultsList: Array<{
     type: FaultType;
     title: string;
     description: string;
     system: string;
+    category: 'TURBO' | 'FUEL' | 'IGNITION' | 'COOLING' | 'LUBRICATION' | 'GEARBOX' | 'EXHAUST' | 'ELECTRICAL';
     severityLevel: 'CRITICAL' | 'WARN';
   }> = [
+    // Turbocharger & TCU
     {
-      type: 'MOTOR_1_FAILURE',
-      title: 'MOTOR 1 (FRONT-RIGHT) COMPLETE CUTOFF / ESC SHUTDOWN',
-      description: 'Zeroes M1 thrust, forces opposing motors to 95% compensation, tilts roll attitude, trips XGBoost propulsion anomaly.',
-      system: 'PROPULSION',
-      severityLevel: 'CRITICAL',
-    },
-    {
-      type: 'MOTOR_3_DEGRADATION',
-      title: 'MOTOR 3 (REAR-RIGHT) BEARING FLUTTER & THERMAL SPIKE',
-      description: 'Induces harmonic RPM oscillation and raises coil temperature to 68.5°C.',
-      system: 'PROPULSION',
-      severityLevel: 'WARN',
-    },
-    {
-      type: 'BATTERY_SAG',
-      title: 'BATTERY 6S CELL 4 VOLTAGE SAG UNDER LOAD',
-      description: 'Drops pack voltage to 20.8V under high-amp load and triggers BMS thermal runaway warning.',
-      system: 'POWER/BMS',
-      severityLevel: 'CRITICAL',
-    },
-    {
-      type: 'GPS_SIGNAL_LOSS',
-      title: 'GNSS SATELLITE CONSTELLATION JAMMING / LOCK LOSS',
-      description: 'Drops tracked satellites from 18 to 0; EKF transitions to dead reckoning.',
-      system: 'NAVIGATION',
-      severityLevel: 'CRITICAL',
-    },
-    {
-      type: 'SEVERE_WIND_SHEAR',
-      title: 'SEVERE CROSSWIND SHEAR GUST (21.5 M/S)',
-      description: 'Forces quadcopter into heavy bank angle and increases vibration metrics.',
-      system: 'ATMOSPHERE',
-      severityLevel: 'WARN',
-    },
-    {
-      type: 'BAROMETER_DRIFT',
-      title: 'STATIC PORT OBSTRUCTION BAROMETER DRIFT (+15M)',
-      description: 'Creates altitude innovation discrepancy between Baro and GNSS/Optical Flow.',
-      system: 'SENSORS',
-      severityLevel: 'WARN',
-    },
-    {
-      type: 'IMU_SENSOR_NOISE',
-      title: 'IMU ACCELEROMETER & GYRO NOISE MULTIPLIER',
-      description: 'Injects high-frequency sensor noise across X/Y/Z axes.',
-      system: 'AVIONICS',
-      severityLevel: 'WARN',
-    },
-    {
-      type: 'ENGINE_OVERHEATING',
-      title: 'ROTAX 914F THERMODYNAMIC OVERHEATING (CHT > 135°C)',
-      description: 'Triggers CHT thermal runaway and coolant loop overheating beyond 115°C safety limit.',
-      system: 'COMBUSTION',
-      severityLevel: 'CRITICAL',
-    },
-    {
-      type: 'OIL_PRESSURE_LOSS',
-      title: 'LUBRICATION PUMP LOSS / PRESSURE DROP (< 1.5 BAR)',
-      description: 'Simulates scavenge failure; oil pressure plunges below 1.5 bar with rapid bearing temperature rise.',
-      system: 'LUBRICATION',
-      severityLevel: 'CRITICAL',
-    },
-    {
-      type: 'VIBRATION_ANOMALY',
-      title: 'CRANKSHAFT 1X-2X HARMONIC VIBRATION SPIKE (> 5.8 MM/S)',
-      description: 'Induces severe mechanical vibration anomaly across X/Y/Z tri-axial accelerometer.',
-      system: 'MECHANICAL',
-      severityLevel: 'WARN',
-    },
-    {
-      type: 'FUEL_SYSTEM_LEAK',
-      title: 'FUEL INJECTION RAIL PRESSURE DROP & FLOW LEAK',
-      description: 'Rail pressure drops to 1.8 bar while fuel consumption jumps by 60% due to line rupture.',
-      system: 'FUEL SYSTEM',
+      type: 'TURBO_OVERBOOST',
+      title: 'TURBO WASTEGATE JAMMED CLOSED / MANIFOLD OVERBOOST',
+      description: 'Wastegate fails to open; manifold pressure exceeds 39.9 inHg takeoff limit with severe IAT rise.',
+      system: 'TURBO & TCU',
+      category: 'TURBO',
       severityLevel: 'CRITICAL',
     },
     {
       type: 'TURBO_WASTEGATE_STUCK',
       title: 'TURBOCHARGER WASTEGATE ACTUATOR STUCK OPEN',
-      description: 'Loss of manifold boost pressure (MAP falls to ambient); unable to maintain takeoff/cruise power.',
-      system: 'INDUCTION',
+      description: 'Loss of manifold boost pressure (MAP falls to atmospheric vacuum); unable to maintain climb/cruise power.',
+      system: 'TURBO & TCU',
+      category: 'TURBO',
       severityLevel: 'WARN',
     },
     {
+      type: 'TCU_FAULT',
+      title: 'TURBOCHARGER TCU SERVO & SENSOR COMMUNICATION FAULT',
+      description: 'Electronic Turbocharger Control Unit servo feedback failure; trips caution lamp and forces fallback boost.',
+      system: 'TURBO & TCU',
+      category: 'TURBO',
+      severityLevel: 'WARN',
+    },
+    {
+      type: 'TURBO_DEGRADATION',
+      title: 'TURBOCHARGER COMPRESSOR AERO & JOURNAL BEARING DRAG',
+      description: 'Turbine drag and aerodynamic fouling; spool-up lag and loss of rated takeoff power.',
+      system: 'TURBO & TCU',
+      category: 'TURBO',
+      severityLevel: 'WARN',
+    },
+
+    // Fuel System & Twin Bing 64 Carburetors
+    {
+      type: 'FUEL_SYSTEM_LEAK',
+      title: 'FUEL DELIVERY LINE LEAK & REGULATOR PRESSURE DROP',
+      description: 'Diaphragm fuel regulator pressure collapses below airbox+0.25 bar nominal with fuel delivery leak.',
+      system: 'FUEL SYSTEM',
+      category: 'FUEL',
+      severityLevel: 'CRITICAL',
+    },
+    {
+      type: 'FUEL_PUMP_1_FAILURE',
+      title: 'PRIMARY 12V ELECTRIC FUEL PUMP 1 CUTOFF',
+      description: 'Primary 12V vane pump electrical trip; automatic switchover to redundant standby fuel pump 2.',
+      system: 'FUEL SYSTEM',
+      category: 'FUEL',
+      severityLevel: 'WARN',
+    },
+    {
+      type: 'FUEL_PUMP_2_FAILURE',
+      title: 'AUXILIARY STANDBY FUEL PUMP 2 ELECTRICAL TRIP',
+      description: 'Secondary electric fuel pump offline; loss of redundant fuel delivery capability.',
+      system: 'FUEL SYSTEM',
+      category: 'FUEL',
+      severityLevel: 'WARN',
+    },
+    {
+      type: 'CARBURETOR_IMBALANCE',
+      title: 'TWIN BING 64 CARBURETOR THROTTLE / VACUUM IMBALANCE',
+      description: 'Mechanical linkage synchronization skew between carb 1 (cyl 1/3) and carb 2 (cyl 2/4); trips cylinder CHT divergence.',
+      system: 'CARBURETORS',
+      category: 'FUEL',
+      severityLevel: 'WARN',
+    },
+
+    // Dual Ducati CDI Ignition
+    {
       type: 'CYLINDER_MISFIRE',
-      title: 'CYLINDER 3 IGNITION MISFIRE / SPARK DROP',
-      description: 'Dual CDI failure on cylinder 3; causes severe temperature drop on Cyl 3 and rotational hunting.',
-      system: 'IGNITION',
+      title: 'CYLINDER 3 SPARK PLUG FOULING & IGNITION MISFIRE',
+      description: 'Dual CDI spark failure on cylinder 3; causes severe temperature drop on Cyl 3 and rotational speed hunting.',
+      system: 'CDI IGNITION',
+      category: 'IGNITION',
+      severityLevel: 'WARN',
+    },
+    {
+      type: 'IGNITION_A_FAILURE',
+      title: 'DUCATI CDI IGNITION CIRCUIT A DROPOUT',
+      description: 'Primary capacitor discharge ignition circuit A offline; engine running on circuit B with single-CDI RPM droop (~75 RPM).',
+      system: 'CDI IGNITION',
+      category: 'IGNITION',
+      severityLevel: 'WARN',
+    },
+    {
+      type: 'IGNITION_B_FAILURE',
+      title: 'DUCATI CDI IGNITION CIRCUIT B DROPOUT',
+      description: 'Secondary capacitor discharge ignition circuit B offline; engine running on circuit A with single-CDI RPM droop (~75 RPM).',
+      system: 'CDI IGNITION',
+      category: 'IGNITION',
+      severityLevel: 'WARN',
+    },
+
+    // Mixed Cooling System
+    {
+      type: 'ENGINE_OVERHEATING',
+      title: 'ROTAX 914F THERMODYNAMIC CORE OVERHEATING (CHT > 135°C)',
+      description: 'Triggers CHT thermal runaway beyond 135°C limit and coolant loop overheating beyond 115°C safety limit.',
+      system: 'COOLING',
+      category: 'COOLING',
+      severityLevel: 'CRITICAL',
+    },
+    {
+      type: 'COOLANT_TEMP_RISE',
+      title: 'CYLINDER HEAD COOLANT OVERHEAT SURGE (> 115°C)',
+      description: 'Closed-loop coolant expansion tank thermal runaway; exceeds 115°C cylinder head exit limit.',
+      system: 'COOLING',
+      category: 'COOLING',
+      severityLevel: 'CRITICAL',
+    },
+    {
+      type: 'REDUCED_COOLANT_FLOW',
+      title: 'COOLANT CIRCULATION PUMP CAVITATION & FLOW LOSS (< 18 L/MIN)',
+      description: 'Coolant circulation flow restriction; induces rapid cylinder head thermal gradient divergence on rear cylinders.',
+      system: 'COOLING',
+      category: 'COOLING',
+      severityLevel: 'WARN',
+    },
+
+    // Dry-Sump Lubrication
+    {
+      type: 'OIL_PRESSURE_LOSS',
+      title: 'LUBRICATION PUMP LOSS / PRESSURE DROP (< 1.5 BAR)',
+      description: 'Simulates scavenge failure; oil pressure plunges below 1.5 bar with rapid bearing temperature rise.',
+      system: 'LUBRICATION',
+      category: 'LUBRICATION',
+      severityLevel: 'CRITICAL',
+    },
+    {
+      type: 'HIGH_OIL_TEMP',
+      title: 'OIL COOLER BYPASS JAM / THERMAL SATURATION (> 130°C)',
+      description: 'Oil temperature surges beyond 130°C redline; thermal viscosity breakdown and bearing film collapse hazard.',
+      system: 'LUBRICATION',
+      category: 'LUBRICATION',
+      severityLevel: 'CRITICAL',
+    },
+    {
+      type: 'OIL_SYSTEM_DEGRADATION',
+      title: 'OIL SCAVENGE AERATION & MAGNETIC CHIP WARNING',
+      description: 'Foaming in dry-sump tank and fine particulate on magnetic drain plug; fluctuating oil pressure.',
+      system: 'LUBRICATION',
+      category: 'LUBRICATION',
+      severityLevel: 'WARN',
+    },
+
+    // Reduction Gearbox (2.43:1) & Mechanical
+    {
+      type: 'GEARBOX_VIBRATION',
+      title: 'PROPELLER REDUCTION GEARBOX MECHANICAL FLUTTER (> 6.0 MM/S)',
+      description: 'Dog clutch overload vibration spike (> 6.0 mm/s RMS) and casing temperature surge (> 100°C).',
+      system: 'GEARBOX',
+      category: 'GEARBOX',
+      severityLevel: 'CRITICAL',
+    },
+    {
+      type: 'BEARING_DEGRADATION',
+      title: 'CRANKSHAFT PLAIN JOURNAL HYDRODYNAMIC BEARING WEAR',
+      description: 'Hydrodynamic bearing wear inducing 1X vibration harmonics (> 6.5 mm/s) and elevated oil temperature.',
+      system: 'MECHANICAL',
+      category: 'GEARBOX',
+      severityLevel: 'CRITICAL',
+    },
+    {
+      type: 'GEARBOX_TEMP_INCREASE',
+      title: 'REDUCTION GEARBOX CASING OVERHEATING (> 115°C)',
+      description: 'Gearbox casing temperature exceeding 115°C; tooth friction or inadequate lubrication.',
+      system: 'GEARBOX',
+      category: 'GEARBOX',
+      severityLevel: 'WARN',
+    },
+    {
+      type: 'VIBRATION_ANOMALY',
+      title: 'ENGINE MOUNT DAMPER DEGRADATION / HARMONIC VIBRATION',
+      description: 'Severe 1X-2X crankshaft harmonic vibration anomaly exceeding 5.5 mm/s RMS.',
+      system: 'MECHANICAL',
+      category: 'GEARBOX',
+      severityLevel: 'WARN',
+    },
+
+    // Exhaust System
+    {
+      type: 'EXHAUST_RESTRICTION',
+      title: 'EXHAUST COLLECTOR / PRE-TURBINE RESTRICTION (EGT > 950°C)',
+      description: 'Pre-turbine backpressure surge; EGT rises above 950°C redline and engine power chokes by ~28%.',
+      system: 'EXHAUST',
+      category: 'EXHAUST',
+      severityLevel: 'CRITICAL',
+    },
+    {
+      type: 'CYLINDER_EGT_IMBALANCE',
+      title: 'CYLINDER BANK EGT SPREAD IMBALANCE (Δ > 85°C)',
+      description: 'Combustion bank mixture skew; differential EGT between banks exceeds 85°C.',
+      system: 'EXHAUST',
+      category: 'EXHAUST',
+      severityLevel: 'WARN',
+    },
+
+    // Electrical Generation
+    {
+      type: 'GENERATOR_FAILURE',
+      title: 'INTEGRATED 250W AC GENERATOR CUTOUT',
+      description: 'Internal engine AC stator output drops to 0W; avionics and TCU running on buffer battery drain.',
+      system: 'ELECTRICAL',
+      category: 'ELECTRICAL',
+      severityLevel: 'WARN',
+    },
+    {
+      type: 'ALTERNATOR_FAILURE',
+      title: 'EXTERNAL 40A ENGINE ALTERNATOR REGULATOR DROPOUT',
+      description: 'Engine-driven 28V alternator dropout; main DC bus voltage sags to battery buffer level.',
+      system: 'ELECTRICAL',
+      category: 'ELECTRICAL',
       severityLevel: 'WARN',
     },
   ];
@@ -162,42 +289,80 @@ export const FaultInjectionModal: React.FC<FaultInjectionModalProps> = ({ isOpen
             )}
           </div>
 
+          {/* Category Filter Tabs */}
+          <div className="flex items-center space-x-1.5 overflow-x-auto pb-1 text-[9px] scrollbar-none">
+            {[
+              { id: 'ALL', label: 'ALL FAULTS (25)' },
+              { id: 'TURBO', label: 'TURBO & TCU' },
+              { id: 'FUEL', label: 'FUEL & CARBS' },
+              { id: 'IGNITION', label: 'DUAL CDI' },
+              { id: 'COOLING', label: 'COOLING' },
+              { id: 'LUBRICATION', label: 'LUBRICATION' },
+              { id: 'GEARBOX', label: 'GEARBOX' },
+              { id: 'EXHAUST', label: 'EXHAUST' },
+              { id: 'ELECTRICAL', label: 'ELECTRICAL' },
+            ].map((cat) => (
+              <button
+                key={cat.id}
+                onClick={() => setSelectedCategory(cat.id)}
+                className={`px-2.5 py-1 rounded-lg font-bold shrink-0 transition-all ${
+                  selectedCategory === cat.id
+                    ? 'bg-[#1c1917] text-white shadow-xs'
+                    : 'bg-[#efeae2] text-[#786c5f] hover:text-[#1c1917] hover:bg-[#e4ddd0]'
+                }`}
+              >
+                {cat.label}
+              </button>
+            ))}
+          </div>
+
           <div className="space-y-2">
-            {faultsList.map((item) => {
-              const active = isFaultActive(item.type);
+            {faultsList
+              .filter((item) => selectedCategory === 'ALL' || item.category === selectedCategory)
+              .map((item) => {
+                const active = isFaultActive(item.type);
 
-              return (
-                <div
-                  key={item.type}
-                  className={`p-3 rounded-xl border text-xs flex items-start justify-between gap-3 transition-all ${
-                    active
-                      ? 'bg-[#fee2e2]/70 border-[#fca5a5]'
-                      : 'bg-white border-[#ded5c7] hover:border-[#b8aca0]'
-                  }`}
-                >
-                  <div className="space-y-1 flex-1">
-                    <div className="flex items-center space-x-2">
-                      <span className="text-[8px] px-2 py-0.5 rounded-full bg-[#efeae2] text-[#5c544d] border border-[#ded5c7] font-bold">
-                        {item.system}
-                      </span>
-                      <span className="font-bold text-[#1c1917] text-[11px]">{item.title}</span>
-                    </div>
-                    <p className="text-[#786c5f] text-[10px] leading-relaxed">{item.description}</p>
-                  </div>
-
-                  <button
-                    onClick={() => toggleFault(item.type)}
-                    className={`px-3 py-1.5 rounded-full text-[9px] font-bold shrink-0 transition-all ${
+                return (
+                  <div
+                    key={item.type}
+                    className={`p-3 rounded-xl border text-xs flex items-start justify-between gap-3 transition-all ${
                       active
-                        ? 'bg-[#dc2626] text-white shadow-xs'
-                        : 'bg-[#efeae2] text-[#1c1917] border border-[#ded5c7] hover:bg-white'
+                        ? 'bg-[#fee2e2]/70 border-[#fca5a5]'
+                        : 'bg-white border-[#ded5c7] hover:border-[#b8aca0]'
                     }`}
                   >
-                    {active ? 'DISARM' : 'INJECT'}
-                  </button>
-                </div>
-              );
-            })}
+                    <div className="space-y-1 flex-1">
+                      <div className="flex items-center space-x-2">
+                        <span className="text-[8px] px-2 py-0.5 rounded-full bg-[#efeae2] text-[#5c544d] border border-[#ded5c7] font-bold">
+                          {item.system}
+                        </span>
+                        <span
+                          className={`text-[8px] px-1.5 py-0.2 rounded font-bold ${
+                            item.severityLevel === 'CRITICAL'
+                              ? 'bg-red-100 text-red-700 border border-red-200'
+                              : 'bg-amber-100 text-amber-700 border border-amber-200'
+                          }`}
+                        >
+                          {item.severityLevel}
+                        </span>
+                        <span className="font-bold text-[#1c1917] text-[11px]">{item.title}</span>
+                      </div>
+                      <p className="text-[#786c5f] text-[10px] leading-relaxed">{item.description}</p>
+                    </div>
+
+                    <button
+                      onClick={() => toggleFault(item.type)}
+                      className={`px-3 py-1.5 rounded-full text-[9px] font-bold shrink-0 transition-all ${
+                        active
+                          ? 'bg-[#dc2626] text-white shadow-xs'
+                          : 'bg-[#efeae2] text-[#1c1917] border border-[#ded5c7] hover:bg-white'
+                      }`}
+                    >
+                      {active ? 'DISARM' : 'INJECT'}
+                    </button>
+                  </div>
+                );
+              })}
           </div>
         </div>
 

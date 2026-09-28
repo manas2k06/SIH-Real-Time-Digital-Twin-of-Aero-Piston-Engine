@@ -36,8 +36,13 @@ export interface AnomalySubsystemStatus {
     | 'Flight Stability'
     | 'Thermodynamic Core'
     | 'Lubrication System'
+    | 'Fuel Delivery & Carburetors'
     | 'Fuel Injection'
     | 'Turbo Induction'
+    | 'Reduction Gearbox & Prop'
+    | 'Ignition System'
+    | 'Exhaust System'
+    | 'Electrical System'
     | 'Aero-Piston Engine Core';
   severity: AnomalySeverity;
   score: number; // 0.0 to 1.0
@@ -66,7 +71,21 @@ export type RULTrend = 'STABLE' | 'DEGRADING' | 'ACCELERATING';
 export interface ComponentRUL {
   id: string;
   name: string;
-  subsystem: 'Battery' | 'Propulsion' | 'ESC' | 'Avionics' | 'Engine Core' | 'Turbocharger' | 'Lubrication Pump' | 'Alternator';
+  subsystem: 
+    | 'Battery' 
+    | 'Propulsion' 
+    | 'ESC' 
+    | 'Avionics' 
+    | 'Engine Core' 
+    | 'Turbocharger' 
+    | 'Lubrication Pump' 
+    | 'Alternator'
+    | 'Reduction Gearbox'
+    | 'Carburetors'
+    | 'Ignition System'
+    | 'Fuel System'
+    | 'Cooling System'
+    | 'Bearings';
   rulValue: number; // in hours or cycles
   rulUnit: 'hours' | 'cycles' | 'percentage';
   nominalLife: number; // total expected design life

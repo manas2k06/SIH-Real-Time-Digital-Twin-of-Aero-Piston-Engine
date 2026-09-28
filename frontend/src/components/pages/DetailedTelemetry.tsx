@@ -14,8 +14,10 @@ import {
 type SubsystemTab = 
   | 'ALL' 
   | 'OPERATING' 
+  | 'CYLINDERS'
   | 'LUBRICATION_FUEL' 
   | 'INTAKE_IGNITION' 
+  | 'GEARBOX_PROP'
   | 'MECHANICAL_VIB' 
   | 'COOLING_ELEC' 
   | 'MAINTENANCE_RUL' 
@@ -676,7 +678,7 @@ export const DetailedTelemetry: React.FC = () => {
       { label: 'Feed', value: 24.0, unit: 'bar' },
       { label: 'Scav', value: 26.0, unit: 'bar' },
       { label: 'Sump', value: 32.0, unit: 'L' },
-      { label: 'Rail', value: 32.0, unit: 'bar' },
+      { label: 'RegP', value: 0.25, unit: 'bar' },
       { label: 'Cooler', value: 18.0, unit: '°C' },
       { label: 'Filter', value: 12.0, unit: 'bar' },
       { label: 'Vent', value: 8.0, unit: 'bar' },
@@ -1023,14 +1025,14 @@ export const DetailedTelemetry: React.FC = () => {
                       {bentoTab === 'COMBUSTION' && `${avgCht.toFixed(0)}°`}
                       {bentoTab === 'LUBRICATION' && `${fuelFlow.toFixed(1)} L/h`}
                       {bentoTab === 'TURBO' && `${(engine?.intake.airMassFlow ?? 207.3).toFixed(1)} kg/h`}
-                      {bentoTab === 'COOLING' && `${(engine?.electrical.alternatorVoltage ?? 28.4).toFixed(1)} V`}
+                      {bentoTab === 'COOLING' && `${(engine?.electrical.externalAlternatorVoltage ?? 28.4).toFixed(1)} V`}
                       {bentoTab === 'SENSORS' && `${vibRms.toFixed(2)} mm/s`}
                     </span>
                     <span className="text-base sm:text-lg font-black text-slate-800">
                       {bentoTab === 'COMBUSTION' && `/ ${maxSafeCht}°C`}
                       {bentoTab === 'LUBRICATION' && `/ 32.0 L/h Max`}
                       {bentoTab === 'TURBO' && `Mass Airflow`}
-                      {bentoTab === 'COOLING' && `/ ${(engine?.electrical.alternatorCurrent ?? 15.2).toFixed(1)} A`}
+                      {bentoTab === 'COOLING' && `/ ${(engine?.electrical.externalAlternatorCurrent ?? 15.2).toFixed(1)} A`}
                       {bentoTab === 'SENSORS' && `RMS Vibration`}
                     </span>
                   </div>
@@ -1198,14 +1200,14 @@ export const DetailedTelemetry: React.FC = () => {
                   </div>
                   <div className="font-black text-[#070d18] text-sm mt-0.5">
                     {bentoTab === 'COMBUSTION' && 'Port Bank'}
-                    {bentoTab === 'LUBRICATION' && 'Port Injector Rail'}
+                    {bentoTab === 'LUBRICATION' && 'Bing 64 Carb #1 (Cyl 1&3)'}
                     {bentoTab === 'TURBO' && 'Exhaust Turbine'}
                     {bentoTab === 'COOLING' && 'DC Bus A (Regulated)'}
                     {bentoTab === 'SENSORS' && 'DAQ Node 1 (Core)'}
                   </div>
                   <div className="text-[9px] text-slate-900 font-black truncate">
                     {bentoTab === 'COMBUSTION' && `C1: ${(engine?.combustion.cht.cylinders[0] ?? 114.2).toFixed(0)}° · C2: ${(engine?.combustion.cht.cylinders[1] ?? 116.5).toFixed(0)}°`}
-                    {bentoTab === 'LUBRICATION' && `Timing: ${(engine?.fuel.injectionTiming ?? 27.3).toFixed(1)}° BTDC · Pulse: ${(engine?.fuel.injectionDuration ?? 5.36).toFixed(2)} ms`}
+                    {bentoTab === 'LUBRICATION' && `Slide: ${(engine?.carburetors.carburetor_1.slidePosition ?? 52)}% · Float Bowl: OK · ${engine?.carburetors.carburetor_1.status ?? 'NOMINAL'}`}
                     {bentoTab === 'TURBO' && `Wastegate: ${(engine?.intake.wastegatePosition ?? 69).toFixed(0)}% OPEN · 118,500 RPM`}
                     {bentoTab === 'COOLING' && `28.4V Regulated · 15.2A · ECU & CDI Loop`}
                     {bentoTab === 'SENSORS' && `Crank 5450 RPM · CHT/EGT Array · Oil 4.45b`}
@@ -1235,7 +1237,7 @@ export const DetailedTelemetry: React.FC = () => {
                     <Lock className="w-3 h-3 text-sky-400 stroke-[2.5]" />
                     <span>
                       {bentoTab === 'COMBUSTION' && 'CDI BANK A'}
-                      {bentoTab === 'LUBRICATION' && 'INJECTOR A'}
+                      {bentoTab === 'LUBRICATION' && 'BING 64 #1'}
                       {bentoTab === 'TURBO' && 'TURBINE STAGE'}
                       {bentoTab === 'COOLING' && 'BUS A FEED'}
                       {bentoTab === 'SENSORS' && 'DAQ NODE 1'}
@@ -1250,21 +1252,21 @@ export const DetailedTelemetry: React.FC = () => {
                 <div>
                   <div className="text-[10px] font-black text-slate-900 uppercase tracking-wider">
                     {bentoTab === 'COMBUSTION' && 'Closed-Loop'}
-                    {bentoTab === 'LUBRICATION' && 'High-Pressure'}
+                    {bentoTab === 'LUBRICATION' && 'Twin Diaphragm'}
                     {bentoTab === 'TURBO' && 'Heat Exchange'}
                     {bentoTab === 'COOLING' && 'Essential Feeder'}
                     {bentoTab === 'SENSORS' && 'Flight Bay'}
                   </div>
                   <div className="font-black text-[#070d18] text-sm mt-0.5">
                     {bentoTab === 'COMBUSTION' && 'Starboard Bank'}
-                    {bentoTab === 'LUBRICATION' && 'Starboard Injector Rail'}
+                    {bentoTab === 'LUBRICATION' && 'Bing 64 Carb #2 (Cyl 2&4)'}
                     {bentoTab === 'TURBO' && 'Charge Intercooler'}
                     {bentoTab === 'COOLING' && 'DC Bus B (Essential)'}
                     {bentoTab === 'SENSORS' && 'DAQ Node 2 (Avionics)'}
                   </div>
                   <div className="text-[9px] text-slate-900 font-black truncate">
                     {bentoTab === 'COMBUSTION' && `C3: ${(engine?.combustion.cht.cylinders[2] ?? 122.1).toFixed(0)}° · C4: ${(engine?.combustion.cht.cylinders[3] ?? 119.3).toFixed(0)}°`}
-                    {bentoTab === 'LUBRICATION' && `Timing: ${(engine?.fuel.injectionTiming ?? 27.3).toFixed(1)}° BTDC · Pulse: ${(engine?.fuel.injectionDuration ?? 5.36).toFixed(2)} ms`}
+                    {bentoTab === 'LUBRICATION' && `Slide: ${(engine?.carburetors.carburetor_2.slidePosition ?? 54)}% · Balance: ${(engine?.carburetors.balance ?? 99.1).toFixed(1)}%`}
                     {bentoTab === 'TURBO' && `Core Delta -28.4°C · DP 0.04 bar`}
                     {bentoTab === 'COOLING' && `28.2V Buffer · 4.2A · Flight Avionics`}
                     {bentoTab === 'SENSORS' && `6-DOF IMU 200Hz · Baro Static · CAN A/B`}
@@ -1294,7 +1296,7 @@ export const DetailedTelemetry: React.FC = () => {
                     <Lock className="w-3 h-3 text-sky-400 stroke-[2.5]" />
                     <span>
                       {bentoTab === 'COMBUSTION' && 'CDI BANK B'}
-                      {bentoTab === 'LUBRICATION' && 'INJECTOR B'}
+                      {bentoTab === 'LUBRICATION' && 'BING 64 #2'}
                       {bentoTab === 'TURBO' && 'CHARGE STAGE'}
                       {bentoTab === 'COOLING' && 'BUS B FEED'}
                       {bentoTab === 'SENSORS' && 'DAQ NODE 2'}
@@ -1411,10 +1413,12 @@ export const DetailedTelemetry: React.FC = () => {
         {/* Subsystem Navigation Pills */}
         <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
           {[
-            { id: 'ALL', label: 'ALL 16 SUBSYSTEMS' },
+            { id: 'ALL', label: 'ALL 12 SUBSYSTEMS' },
             { id: 'OPERATING', label: 'OPERATING & COMBUSTION' },
-            { id: 'LUBRICATION_FUEL', label: 'LUBRICATION & FUEL' },
-            { id: 'INTAKE_IGNITION', label: 'INTAKE & IGNITION' },
+            { id: 'CYLINDERS', label: '4-CYLINDER BOXER' },
+            { id: 'INTAKE_IGNITION', label: 'TURBO & TCU' },
+            { id: 'LUBRICATION_FUEL', label: 'LUBRICATION & BING 64' },
+            { id: 'GEARBOX_PROP', label: 'GEARBOX (2.43:1)' },
             { id: 'MECHANICAL_VIB', label: 'MECHANICAL & VIB' },
             { id: 'COOLING_ELEC', label: 'COOLING & 28V BUS' },
             { id: 'MAINTENANCE_RUL', label: 'MAINTENANCE & RUL' },
@@ -1434,11 +1438,11 @@ export const DetailedTelemetry: React.FC = () => {
           ))}
         </div>
 
-        {/* 8 Subsystem Blocks with Frosted Glass & Popped-Out Shadowed Borders */}
+        {/* 12 Subsystem Blocks with Frosted Glass & Popped-Out Shadowed Borders */}
         <div className={
           matrixTab === 'ALL'
-            ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-xs'
-            : matrixTab === 'LUBRICATION_FUEL'
+            ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 text-xs'
+            : matrixTab === 'LUBRICATION_FUEL' || matrixTab === 'CYLINDERS' || matrixTab === 'GEARBOX_PROP' || matrixTab === 'INTAKE_IGNITION' || matrixTab === 'COOLING_ELEC'
             ? 'grid grid-cols-1 md:grid-cols-2 gap-5 text-xs max-w-5xl mx-auto'
             : 'grid grid-cols-1 gap-5 text-xs max-w-2xl mx-auto'
         }>
@@ -1602,12 +1606,12 @@ export const DetailedTelemetry: React.FC = () => {
           </div>
           )}
 
-          {/* BOX 3: FUEL SYSTEM */}
+          {/* BOX 3: FUEL & TWIN BING 64 CARBURETORS */}
           {(matrixTab === 'ALL' || matrixTab === 'LUBRICATION_FUEL') && (
           <div className="glass-popped-card rounded-[28px] p-4 sm:p-5 space-y-3">
             <div className="text-[11px] font-black text-slate-950 uppercase tracking-wider pb-1 border-b border-white/60 flex items-center justify-between">
-              <span>FUEL SYSTEM</span>
-              <span className="text-sky-900 font-black">INJECTION</span>
+              <span>FUEL & CARBURETORS</span>
+              <span className="text-sky-900 font-black">TWIN BING 64</span>
             </div>
 
             {/* Fuel Flow Turbine Row */}
@@ -1620,24 +1624,61 @@ export const DetailedTelemetry: React.FC = () => {
                 </div>
               </div>
               <span className="text-[9px] font-black text-sky-950 bg-sky-200/90 px-2 py-0.5 rounded border border-sky-400 shadow-2xs">
-                FLOW
+                CONSUMPTION
               </span>
             </div>
 
-            {/* Rail Pressure Pulse Row */}
+            {/* Regulated Fuel Pressure (Airbox + 0.25 bar) */}
             <div className="glass-popped-row p-2.5 rounded-2xl flex items-center justify-between gap-2.5">
               <div className="flex items-center space-x-2.5 min-w-0">
                 <div className="w-8 h-8 rounded-lg bg-sky-200/90 border border-sky-400 flex items-center justify-center p-1">
                   <div className="w-full h-1.5 bg-sky-700 rounded-full animate-pulse" />
                 </div>
                 <div className="truncate">
-                  <div className="text-[11px] text-slate-900 font-extrabold">Rail Pressure</div>
+                  <div className="text-[11px] text-slate-900 font-extrabold">Regulated Fuel Pressure</div>
                   <div className="font-black text-sm text-[#070d18]">
-                    {engine?.fuel.fuelPressure.toFixed(1) ?? '3.2'} bar
+                    {(engine?.fuel.fuelPressure ?? 0.25).toFixed(2)} bar
                   </div>
                 </div>
               </div>
-              <span className="text-[9px] font-black text-slate-900">COMMON RAIL</span>
+              <span className="text-[9px] font-black text-slate-900">AIRBOX + 0.25b</span>
+            </div>
+
+            {/* Twin 12V Electric Fuel Pumps Status */}
+            <div className="glass-popped-row p-2.5 rounded-2xl flex items-center justify-between gap-2.5">
+              <div className="flex items-center space-x-2.5 min-w-0">
+                <div className="w-8 h-8 rounded-lg bg-emerald-200/90 border border-emerald-400 p-1 flex items-center justify-center font-bold text-xs text-emerald-900">
+                  2×
+                </div>
+                <div className="truncate">
+                  <div className="text-[11px] text-slate-900 font-extrabold">Fuel Pumps (1 & 2)</div>
+                  <div className="font-black text-xs text-[#070d18] flex items-center gap-1.5">
+                    <span className={engine?.fuel_system?.pump_1?.state === 'ACTIVE' ? 'text-emerald-700 font-black' : 'text-rose-600 font-black'}>
+                      P1: {engine?.fuel_system?.pump_1?.state ?? 'ACTIVE'}
+                    </span>
+                    <span>·</span>
+                    <span className={engine?.fuel_system?.pump_2?.state === 'ACTIVE' ? 'text-emerald-700 font-black' : 'text-slate-600 font-black'}>
+                      P2: {engine?.fuel_system?.pump_2?.state ?? 'STANDBY'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <span className="text-[9px] font-black text-emerald-950 bg-emerald-200 px-2 py-0.5 rounded shadow-2xs">
+                DUAL 12V
+              </span>
+            </div>
+
+            {/* Twin Bing 64 Carburetor Balance Row */}
+            <div className="glass-popped-row p-2.5 rounded-2xl flex items-center justify-between gap-2.5">
+              <div className="truncate">
+                <div className="text-[11px] text-slate-900 font-extrabold">Twin Bing 64 Balance</div>
+                <div className="font-black text-sm text-[#070d18]">
+                  {(engine?.carburetors?.balance ?? 99.1).toFixed(1)}% Synchronized
+                </div>
+              </div>
+              <span className="text-[9px] font-black text-amber-950 bg-amber-200/90 px-2 py-0.5 rounded border border-amber-400 shadow-2xs">
+                CD CARBS
+              </span>
             </div>
 
             {/* Fuel Remaining Float Row */}
@@ -1649,40 +1690,11 @@ export const DetailedTelemetry: React.FC = () => {
                 <div className="truncate">
                   <div className="text-[11px] text-slate-900 font-extrabold">Fuel Remaining</div>
                   <div className="font-black text-sm text-emerald-900">
-                    {engine?.fuel.fuelRemainingPercent.toFixed(1) ?? '71.1'}%
+                    {(engine?.fuel.fuelRemainingPercent ?? 71.1).toFixed(1)}% ({(engine?.fuel.fuelQuantity ?? 64.5).toFixed(1)} L)
                   </div>
                 </div>
               </div>
-              <span className="text-[9px] font-black text-slate-900">TANK 1</span>
-            </div>
-
-            {/* Injection Timing Strobe Row */}
-            <div className="glass-popped-row p-2.5 rounded-2xl flex items-center justify-between gap-2.5">
-              <div className="flex items-center space-x-2.5 min-w-0">
-                <TimingWheelAnimation />
-                <div className="truncate">
-                  <div className="text-[11px] text-slate-900 font-extrabold">Injection Timing</div>
-                  <div className="font-black text-sm text-[#070d18]">
-                    {engine?.fuel.injectionTiming.toFixed(1) ?? '27.3'}° BTDC
-                  </div>
-                </div>
-              </div>
-              <span className="text-[9px] font-black text-amber-950 bg-amber-200/90 px-2 py-0.5 rounded border border-amber-400 shadow-2xs">
-                STROBE
-              </span>
-            </div>
-
-            {/* Pulse Width Row */}
-            <div className="glass-popped-row p-2.5 rounded-2xl flex items-center justify-between">
-              <div className="truncate">
-                <span className="text-[11px] text-slate-900 font-extrabold">Solenoid Pulse Width</span>
-                <div className="font-black text-sm text-[#070d18]">
-                  {engine?.fuel.injectionDuration.toFixed(2) ?? '5.36'} ms
-                </div>
-              </div>
-              <span className="text-[9px] font-black text-sky-950 bg-sky-200/90 px-2.5 py-0.5 rounded-full border border-sky-400 shadow-2xs">
-                PULSE
-              </span>
+              <span className="text-[9px] font-black text-slate-900">MAIN TANK</span>
             </div>
           </div>
           )}
@@ -1856,7 +1868,7 @@ export const DetailedTelemetry: React.FC = () => {
                 <div className="truncate">
                   <div className="text-[11px] text-slate-900 font-extrabold">Alternator Voltage</div>
                   <div className="font-black text-sm text-[#070d18]">
-                    {engine?.electrical.alternatorVoltage.toFixed(1) ?? '28.4'} V
+                    {(engine?.electrical.externalAlternatorVoltage ?? 28.4).toFixed(1)} V
                   </div>
                 </div>
               </div>
@@ -1872,7 +1884,7 @@ export const DetailedTelemetry: React.FC = () => {
                 <div className="truncate">
                   <div className="text-[11px] text-slate-900 font-extrabold">Alternator Current</div>
                   <div className="font-black text-sm text-[#070d18]">
-                    {engine?.electrical.alternatorCurrent.toFixed(1) ?? '15.2'} A
+                    {(engine?.electrical.externalAlternatorCurrent ?? 15.2).toFixed(1)} A
                   </div>
                 </div>
               </div>
@@ -2094,7 +2106,322 @@ export const DetailedTelemetry: React.FC = () => {
           </div>
           )}
 
-        </div>
+          {/* BOX 9: 4-CYLINDER HORIZONTALLY OPPOSED BOXER */}
+          {(matrixTab === 'ALL' || matrixTab === 'CYLINDERS' || matrixTab === 'OPERATING') && (
+          <div className="glass-popped-card rounded-[28px] p-4 sm:p-5 space-y-3">
+            <div className="text-[11px] font-black text-slate-950 uppercase tracking-wider pb-1 border-b border-white/60 flex items-center justify-between">
+              <span>4-CYLINDER BOXER</span>
+              <span className="text-amber-950 font-black">IM-914 CHT/EGT</span>
+            </div>
+
+            {/* Cylinder Heads CHT Array (Cylinders 1-4) */}
+            <div className="glass-popped-row p-2.5 rounded-2xl space-y-1.5">
+              <div className="flex items-center justify-between text-[11px] font-black text-slate-950 pb-0.5 border-b border-white/40">
+                <span>CYLINDER HEAD TEMPS (CHT)</span>
+                <span className="text-emerald-800">MAX 135°C</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="flex justify-between items-center p-1.5 rounded-xl bg-white/60 border border-white">
+                  <span className="font-extrabold text-slate-800">Cyl 1:</span>
+                  <span className="font-black text-[#070d18]">{(engine?.cylinders?.cylinder_1?.cht ?? 114.2).toFixed(0)}°C</span>
+                </div>
+                <div className="flex justify-between items-center p-1.5 rounded-xl bg-white/60 border border-white">
+                  <span className="font-extrabold text-slate-800">Cyl 2:</span>
+                  <span className="font-black text-[#070d18]">{(engine?.cylinders?.cylinder_2?.cht ?? 116.5).toFixed(0)}°C</span>
+                </div>
+                <div className="flex justify-between items-center p-1.5 rounded-xl bg-white/60 border border-white">
+                  <span className="font-extrabold text-slate-800">Cyl 3:</span>
+                  <span className="font-black text-[#070d18]">{(engine?.cylinders?.cylinder_3?.cht ?? 122.1).toFixed(0)}°C</span>
+                </div>
+                <div className="flex justify-between items-center p-1.5 rounded-xl bg-white/60 border border-white">
+                  <span className="font-extrabold text-slate-800">Cyl 4:</span>
+                  <span className="font-black text-[#070d18]">{(engine?.cylinders?.cylinder_4?.cht ?? 119.3).toFixed(0)}°C</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Exhaust Gas Temps (EGT) Array */}
+            <div className="glass-popped-row p-2.5 rounded-2xl space-y-1.5">
+              <div className="flex items-center justify-between text-[11px] font-black text-slate-950 pb-0.5 border-b border-white/40">
+                <span>EXHAUST GAS TEMPS (EGT)</span>
+                <span className="text-amber-800">MAX 950°C</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="flex justify-between items-center p-1.5 rounded-xl bg-white/60 border border-white">
+                  <span className="font-extrabold text-slate-800">EGT 1:</span>
+                  <span className="font-black text-amber-900">{(engine?.cylinders?.cylinder_1?.egt ?? 820.5).toFixed(0)}°C</span>
+                </div>
+                <div className="flex justify-between items-center p-1.5 rounded-xl bg-white/60 border border-white">
+                  <span className="font-extrabold text-slate-800">EGT 2:</span>
+                  <span className="font-black text-amber-900">{(engine?.cylinders?.cylinder_2?.egt ?? 825.1).toFixed(0)}°C</span>
+                </div>
+                <div className="flex justify-between items-center p-1.5 rounded-xl bg-white/60 border border-white">
+                  <span className="font-extrabold text-slate-800">EGT 3:</span>
+                  <span className="font-black text-amber-900">{(engine?.cylinders?.cylinder_3?.egt ?? 832.4).toFixed(0)}°C</span>
+                </div>
+                <div className="flex justify-between items-center p-1.5 rounded-xl bg-white/60 border border-white">
+                  <span className="font-extrabold text-slate-800">EGT 4:</span>
+                  <span className="font-black text-amber-900">{(engine?.cylinders?.cylinder_4?.egt ?? 824.0).toFixed(0)}°C</span>
+                </div>
+              </div>
+            </div>
+
+            {/* CHT Spread / Max Deviation */}
+            <div className="glass-popped-row p-2.5 rounded-2xl flex items-center justify-between">
+              <div className="truncate">
+                <span className="text-[11px] text-slate-900 font-extrabold">CHT Spread (Delta)</span>
+                <div className="font-black text-sm text-[#070d18]">
+                  Δ {(engine?.cylinders?.chtSpread ?? 7.9).toFixed(1)}°C (Avg: {(engine?.cylinders?.averageCht ?? 118.0).toFixed(1)}°C)
+                </div>
+              </div>
+              <span className="text-[9px] font-black text-emerald-950 bg-emerald-200/90 px-2 py-0.5 rounded border border-emerald-400 shadow-2xs">
+                BALANCED
+              </span>
+            </div>
+
+            {/* Cylinder Combustion Health */}
+            <div className="glass-popped-row p-2.5 rounded-2xl flex items-center justify-between">
+              <div className="truncate">
+                <span className="text-[11px] text-slate-900 font-extrabold">Combustion & Health</span>
+                <div className="font-black text-sm text-emerald-900">
+                  {((engine?.cylinders?.cylinder_1?.combustionHealth ?? 98) + (engine?.cylinders?.cylinder_3?.combustionHealth ?? 97)) / 2}% (Misfires: 0)
+                </div>
+              </div>
+              <span className="text-[9px] font-black text-sky-950 bg-sky-200/90 px-2 py-0.5 rounded border border-sky-400 shadow-2xs">
+                4/4 NORMAL
+              </span>
+            </div>
+          </div>
+          )}
+
+          {/* BOX 10: PROPELLER REDUCTION GEARBOX (2.42857:1) */}
+          {(matrixTab === 'ALL' || matrixTab === 'GEARBOX_PROP' || matrixTab === 'MECHANICAL_VIB') && (
+          <div className="glass-popped-card rounded-[28px] p-4 sm:p-5 space-y-3">
+            <div className="text-[11px] font-black text-slate-950 uppercase tracking-wider pb-1 border-b border-white/60 flex items-center justify-between">
+              <span>REDUCTION GEARBOX</span>
+              <span className="text-sky-900 font-black">RATIO 2.43:1</span>
+            </div>
+
+            {/* Input Crank vs Output Propeller RPM */}
+            <div className="glass-popped-row p-2.5 rounded-2xl flex items-center justify-between gap-2.5">
+              <div className="truncate">
+                <span className="text-[11px] text-slate-900 font-extrabold">Crankshaft → Propeller RPM</span>
+                <div className="font-black text-sm text-[#070d18] flex items-center gap-1.5">
+                  <span>{engine?.operating.rpm ?? 5450} RPM</span>
+                  <span className="text-sky-700">→</span>
+                  <span className="text-sky-900">{engine?.gearbox?.propeller_output_rpm ?? Math.round((engine?.operating.rpm ?? 5450) / 2.42857)} RPM</span>
+                </div>
+              </div>
+              <span className="text-[9px] font-black text-sky-950 bg-sky-200/90 px-2 py-0.5 rounded border border-sky-400 shadow-2xs">
+                i = 2.4286
+              </span>
+            </div>
+
+            {/* Gearbox Output Torque */}
+            <div className="glass-popped-row p-2.5 rounded-2xl flex items-center justify-between gap-2.5">
+              <div className="truncate">
+                <span className="text-[11px] text-slate-900 font-extrabold">Gearbox Shaft Torque</span>
+                <div className="font-black text-sm text-amber-900">
+                  {(engine?.gearbox?.gearbox_torque ?? ((engine?.operating.torque ?? 137.3) * 2.42857)).toFixed(1)} Nm
+                </div>
+              </div>
+              <span className="text-[9px] font-black text-amber-950 bg-amber-200/90 px-2 py-0.5 rounded border border-amber-400 shadow-2xs">
+                PROPELLER
+              </span>
+            </div>
+
+            {/* Gearbox Temperature */}
+            <div className="glass-popped-row p-2.5 rounded-2xl flex items-center justify-between gap-2.5">
+              <div className="flex items-center space-x-2.5 min-w-0">
+                <ThermometerAnimation />
+                <div className="truncate">
+                  <div className="text-[11px] text-slate-900 font-extrabold">Gearbox Oil Temp</div>
+                  <div className="font-black text-sm text-[#070d18]">
+                    {(engine?.gearbox?.gearbox_temperature ?? 78.4).toFixed(1)}°C
+                  </div>
+                </div>
+              </div>
+              <span className="text-[9px] font-black text-slate-900">MAX 115°C</span>
+            </div>
+
+            {/* Gearbox Vibration RMS */}
+            <div className="glass-popped-row p-2.5 rounded-2xl flex items-center justify-between gap-2.5">
+              <div className="flex items-center space-x-2.5 min-w-0">
+                <VibrationSineAnimation />
+                <div className="truncate">
+                  <div className="text-[11px] text-slate-900 font-extrabold">Gearbox Vibration RMS</div>
+                  <div className="font-black text-sm text-emerald-900">
+                    {(engine?.gearbox?.gearbox_vibration ?? 1.42).toFixed(2)} mm/s
+                  </div>
+                </div>
+              </div>
+              <span className="text-[9px] font-black text-emerald-950 bg-emerald-200/90 px-2 py-0.5 rounded border border-emerald-400 shadow-2xs">
+                NOMINAL
+              </span>
+            </div>
+
+            {/* Dog Clutch Overload Protection */}
+            <div className="glass-popped-row p-2.5 rounded-2xl flex items-center justify-between">
+              <div className="truncate">
+                <span className="text-[11px] text-slate-900 font-extrabold">Overload Dog Clutch</span>
+                <div className="font-black text-xs text-emerald-800">
+                  {engine?.gearbox?.overloadClutchStatus ? `${engine.gearbox.overloadClutchStatus} / NOMINAL` : 'ENGAGED / NOMINAL'}
+                </div>
+              </div>
+              <span className="text-[9px] font-black text-emerald-950 bg-emerald-200/90 px-2.5 py-0.5 rounded-full border border-emerald-400 shadow-2xs">
+                CLUTCH OK
+              </span>
+            </div>
+          </div>
+          )}
+
+          {/* BOX 11: DUAL DUCATI CDI IGNITION SYSTEM */}
+          {(matrixTab === 'ALL' || matrixTab === 'INTAKE_IGNITION') && (
+          <div className="glass-popped-card rounded-[28px] p-4 sm:p-5 space-y-3">
+            <div className="text-[11px] font-black text-slate-950 uppercase tracking-wider pb-1 border-b border-white/60 flex items-center justify-between">
+              <span>DUAL DUCATI CDI IGNITION</span>
+              <span className="text-sky-900 font-black">26° BTDC</span>
+            </div>
+
+            {/* Circuit A & Circuit B Dual Box */}
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <div className="glass-popped-row p-2.5 rounded-2xl space-y-1">
+                <span className="text-[10px] font-black text-slate-900 uppercase">CIRCUIT A (TOP)</span>
+                <div className="font-black text-sm text-emerald-800">
+                  {engine?.ignition?.ignition_A?.status ?? 'ACTIVE'}
+                </div>
+                <div className="text-[10px] font-bold text-slate-700">
+                  Health: {(engine?.ignition?.ignition_A?.health ?? 99.2).toFixed(0)}%
+                </div>
+              </div>
+              <div className="glass-popped-row p-2.5 rounded-2xl space-y-1">
+                <span className="text-[10px] font-black text-slate-900 uppercase">CIRCUIT B (BOT)</span>
+                <div className="font-black text-sm text-emerald-800">
+                  {engine?.ignition?.ignition_B?.status ?? 'ACTIVE'}
+                </div>
+                <div className="text-[10px] font-bold text-slate-700">
+                  Health: {(engine?.ignition?.ignition_B?.health ?? 99.1).toFixed(0)}%
+                </div>
+              </div>
+            </div>
+
+            {/* Fixed Timing Advance Row */}
+            <div className="glass-popped-row p-2.5 rounded-2xl flex items-center justify-between gap-2.5">
+              <div className="flex items-center space-x-2.5 min-w-0">
+                <TimingWheelAnimation />
+                <div className="truncate">
+                  <div className="text-[11px] text-slate-900 font-extrabold">Ignition Advance</div>
+                  <div className="font-black text-sm text-[#070d18]">
+                    {engine?.ignition?.ignitionAdvance ?? 26.0}° BTDC
+                  </div>
+                </div>
+              </div>
+              <span className="text-[9px] font-black text-amber-950 bg-amber-200/90 px-2 py-0.5 rounded border border-amber-400 shadow-2xs">
+                MAGNETIC PICKUP
+              </span>
+            </div>
+
+            {/* Dual CDI Consistency */}
+            <div className="glass-popped-row p-2.5 rounded-2xl flex items-center justify-between gap-2.5">
+              <div className="truncate">
+                <span className="text-[11px] text-slate-900 font-extrabold">Dual-CDI Consistency</span>
+                <div className="font-black text-sm text-emerald-900">
+                  {(engine?.ignition?.dualIgnitionConsistency ?? 99.4).toFixed(1)}% Match
+                </div>
+              </div>
+              <span className="text-[9px] font-black text-emerald-950 bg-emerald-200/90 px-2 py-0.5 rounded border border-emerald-400 shadow-2xs">
+                SYNCHRONIZED
+              </span>
+            </div>
+
+            {/* Dual Spark Plugs Status */}
+            <div className="glass-popped-row p-2.5 rounded-2xl flex items-center justify-between">
+              <div className="truncate">
+                <span className="text-[11px] text-slate-900 font-extrabold">Spark Plugs (8 Plugs)</span>
+                <div className="font-black text-xs text-[#070d18]">
+                  8/8 Plugs Firing (2 per Cylinder)
+                </div>
+              </div>
+              <span className="text-[9px] font-black text-sky-950 bg-sky-200/90 px-2.5 py-0.5 rounded-full border border-sky-400 shadow-2xs">
+                CDI ONLINE
+              </span>
+            </div>
+          </div>
+          )}
+
+          {/* BOX 12: MIXED COOLING SYSTEM (LIQUID HEADS + RAM-AIR BARRELS) */}
+          {(matrixTab === 'ALL' || matrixTab === 'COOLING_ELEC') && (
+          <div className="glass-popped-card rounded-[28px] p-4 sm:p-5 space-y-3">
+            <div className="text-[11px] font-black text-slate-950 uppercase tracking-wider pb-1 border-b border-white/60 flex items-center justify-between">
+              <span>MIXED COOLING SYSTEM</span>
+              <span className="text-sky-900 font-black">DUAL MEDIA</span>
+            </div>
+
+            {/* Liquid-Cooled Cylinder Heads Exit Temp */}
+            <div className="glass-popped-row p-2.5 rounded-2xl flex items-center justify-between gap-2.5">
+              <div className="truncate">
+                <span className="text-[11px] text-slate-900 font-extrabold">Liquid Head Coolant Exit</span>
+                <div className="font-black text-sm text-[#070d18]">
+                  {(engine?.cooling?.coolantTemperature ?? 88.5).toFixed(1)}°C
+                </div>
+              </div>
+              <span className="text-[9px] font-black text-emerald-950 bg-emerald-200/90 px-2 py-0.5 rounded border border-emerald-400 shadow-2xs">
+                MAX 120°C
+              </span>
+            </div>
+
+            {/* Coolant Loop Pressure & Flow */}
+            <div className="glass-popped-row p-2.5 rounded-2xl flex items-center justify-between gap-2.5">
+              <div className="truncate">
+                <span className="text-[11px] text-slate-900 font-extrabold">Coolant Flow & Pressure</span>
+                <div className="font-black text-sm text-[#070d18]">
+                  {(engine?.cooling?.coolantPressure ?? 1.45).toFixed(2)} bar · {(engine?.cooling?.coolantFlow ?? 42.0).toFixed(0)} L/min
+                </div>
+              </div>
+              <span className="text-[9px] font-black text-sky-950 bg-sky-200/90 px-2 py-0.5 rounded border border-sky-400 shadow-2xs">
+                CIRCULATION
+              </span>
+            </div>
+
+            {/* Radiator Temperature */}
+            <div className="glass-popped-row p-2.5 rounded-2xl flex items-center justify-between gap-2.5">
+              <div className="truncate">
+                <span className="text-[11px] text-slate-900 font-extrabold">Radiator Dissipation</span>
+                <div className="font-black text-sm text-sky-900">
+                  {(engine?.cooling?.radiatorTemperature ?? 74.2).toFixed(1)}°C (14.6 kW heat rejected)
+                </div>
+              </div>
+              <span className="text-[9px] font-black text-slate-900">WATER / GLYCOL</span>
+            </div>
+
+            {/* Ram-Air Cooled Cylinder Barrels */}
+            <div className="glass-popped-row p-2.5 rounded-2xl flex items-center justify-between gap-2.5">
+              <div className="truncate">
+                <span className="text-[11px] text-slate-900 font-extrabold">Ram-Air Cylinder Barrels</span>
+                <div className="font-black text-sm text-[#070d18]">
+                  {(engine?.cooling?.ramAirCooling?.cylinderWallTemperature ?? 142.0).toFixed(1)}°C
+                </div>
+              </div>
+              <span className="text-[9px] font-black text-emerald-950 bg-emerald-200/90 px-2 py-0.5 rounded border border-emerald-400 shadow-2xs">
+                LIMIT 200°C
+              </span>
+            </div>
+
+            {/* Ram-Air Effectiveness */}
+            <div className="glass-popped-row p-2.5 rounded-2xl flex items-center justify-between">
+              <div className="truncate">
+                <span className="text-[11px] text-slate-900 font-extrabold">Air-Cooling Effectiveness</span>
+                <div className="font-black text-sm text-emerald-900">
+                  {(engine?.cooling?.ramAirCooling?.coolingEffectiveness ?? 92.5).toFixed(1)}% Airflow Heat Flux
+                </div>
+              </div>
+              <span className="text-[9px] font-black text-emerald-950 bg-emerald-200/90 px-2.5 py-0.5 rounded-full border border-emerald-400 shadow-2xs">
+                OPTIMAL
+              </span>
+            </div>
+          </div>
+          )}
+          </div>
 
       </div>
 

@@ -8,19 +8,39 @@ export interface SimulationControlsState {
 }
 
 export type FaultType = 
-  | 'MOTOR_1_FAILURE'
-  | 'MOTOR_3_DEGRADATION'
-  | 'BATTERY_SAG'
-  | 'GPS_SIGNAL_LOSS'
-  | 'SEVERE_WIND_SHEAR'
-  | 'BAROMETER_DRIFT'
-  | 'IMU_SENSOR_NOISE'
-  | 'ENGINE_OVERHEATING'
-  | 'OIL_PRESSURE_LOSS'
-  | 'VIBRATION_ANOMALY'
-  | 'FUEL_SYSTEM_LEAK'
+  // Turbocharger & TCU System
   | 'TURBO_WASTEGATE_STUCK'
-  | 'CYLINDER_MISFIRE';
+  | 'TCU_FAULT'
+  | 'TURBO_OVERBOOST'
+  | 'TURBO_DEGRADATION'
+  // Fuel System & Twin Bing 64 Carburetors
+  | 'FUEL_PUMP_1_FAILURE'
+  | 'FUEL_PUMP_2_FAILURE'
+  | 'CARBURETOR_IMBALANCE'
+  | 'FUEL_SYSTEM_LEAK'
+  // Dual Electronic Ignition (Ducati CDI)
+  | 'IGNITION_A_FAILURE'
+  | 'IGNITION_B_FAILURE'
+  | 'CYLINDER_MISFIRE'
+  // Mixed Cooling System (Liquid Heads + Ram-Air Cylinders)
+  | 'ENGINE_OVERHEATING'
+  | 'COOLANT_TEMP_RISE'
+  | 'REDUCED_COOLANT_FLOW'
+  // Dry-Sump Forced Lubrication System
+  | 'OIL_PRESSURE_LOSS'
+  | 'HIGH_OIL_TEMP'
+  | 'OIL_SYSTEM_DEGRADATION'
+  // Propeller Reduction Gearbox (2.43:1) & Mechanical
+  | 'GEARBOX_VIBRATION'
+  | 'GEARBOX_TEMP_INCREASE'
+  | 'BEARING_DEGRADATION'
+  | 'VIBRATION_ANOMALY'
+  // Exhaust System
+  | 'EXHAUST_RESTRICTION'
+  | 'CYLINDER_EGT_IMBALANCE'
+  // Electrical & Generation
+  | 'GENERATOR_FAILURE'
+  | 'ALTERNATOR_FAILURE';
 
 export interface ActiveFault {
   id: string;

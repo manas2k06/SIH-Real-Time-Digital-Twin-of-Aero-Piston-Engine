@@ -2,11 +2,10 @@ import {
   DroneTelemetryData,
   FlightMode,
   SystemStatus,
-  MotorStatus,
   MotorTelemetry,
   Waypoint,
 } from '../types/telemetry';
-import { AeroEngineTelemetry, EngineTelemetryHistoryPoint } from '../types/engine';
+import { AeroEngineTelemetry, EngineTelemetryHistoryPoint, EngineOperatingMode } from '../types/engine';
 import { ActiveFault, EventLogEntry, SyncStatus } from '../types/simulation';
 import { APP_CONFIG } from './config';
 
@@ -185,57 +184,129 @@ export class SimulationEngine {
 
   public injectFault(type: ActiveFault['type'], severity: number = 1.0) {
     const faultLabels: Record<ActiveFault['type'], { label: string; desc: string; source: EventLogEntry['source']; level: EventLogEntry['level'] }> = {
-      MOTOR_1_FAILURE: {
-        label: 'Motor 1 Complete Thrust Failure',
-        desc: 'ESC telemetry shows zero current draw and rotor stoppage on Front-Right arm.',
-        source: 'PROPULSION',
+      // Turbocharger & TCU System
+      TURBO_WASTEGATE_STUCK: {
+        label: 'Turbocharger Wastegate Open / Stuck',
+        desc: 'Wastegate stuck in bypass position; inability to maintain 35.4 inHg boost manifold pressure.',
+        source: 'FAULT_ENGINE',
+        level: 'WARN',
+      },
+      TCU_FAULT: {
+        label: 'Turbocharger TCU Electronic Fault',
+        desc: 'TCU electronics reporting servo actuator fault; boost fallback to mechanical wastegate safety mode.',
+        source: 'FAULT_ENGINE',
+        level: 'WARN',
+      },
+      TURBO_OVERBOOST: {
+        label: 'Turbocharger Wastegate Stuck Closed / Overboost',
+        desc: 'Wastegate fails to relieve turbine pressure; manifold boost exceeds 39.9 inHg takeoff limit.',
+        source: 'FAULT_ENGINE',
         level: 'CRITICAL',
       },
-      MOTOR_3_DEGRADATION: {
-        label: 'Motor 3 RPM Deviation & Coil Overheat',
-        desc: 'Rotor 3 (Rear-Right) operating with high harmonic resistance and thermal rise.',
-        source: 'PROPULSION',
+      TURBO_DEGRADATION: {
+        label: 'Turbocharger Compressor Aero / Bearing Degradation',
+        desc: 'Turbine drag and aerodynamic fouling; spool-up lag and loss of rated takeoff power.',
+        source: 'FAULT_ENGINE',
         level: 'WARN',
       },
-      BATTERY_SAG: {
-        label: 'Battery Cell 4 Rapid Voltage Sag',
-        desc: 'Severe internal resistance spike causing pack voltage drop under high-amp load.',
-        source: 'BATTERY_BMS',
+      // Fuel System & Twin Bing 64 Carburetors
+      FUEL_PUMP_1_FAILURE: {
+        label: 'Electric Fuel Pump 1 Trip / Cutoff',
+        desc: 'Primary 12V fuel pump electrical trip; automatic switchover to redundant standby fuel pump 2.',
+        source: 'FAULT_ENGINE',
+        level: 'WARN',
+      },
+      FUEL_PUMP_2_FAILURE: {
+        label: 'Auxiliary Fuel Pump 2 Electrical Loss',
+        desc: 'Secondary electric fuel pump offline; loss of redundant fuel delivery capability.',
+        source: 'FAULT_ENGINE',
+        level: 'WARN',
+      },
+      CARBURETOR_IMBALANCE: {
+        label: 'Bing 64 Twin Carburetor Imbalance',
+        desc: 'Carburetor 1 vs 2 throttle linkage synchronization deviation; differential vacuum and mixture skew.',
+        source: 'FAULT_ENGINE',
+        level: 'WARN',
+      },
+      FUEL_SYSTEM_LEAK: {
+        label: 'Fuel Supply Pressure Drop & Regulator Leak',
+        desc: 'Diaphragm fuel pressure regulator leak and fuel delivery pressure drop below airbox+0.25 bar nominal.',
+        source: 'FAULT_ENGINE',
         level: 'CRITICAL',
       },
-      GPS_SIGNAL_LOSS: {
-        label: 'GPS Satellite Constellation Loss',
-        desc: 'GPS lock dropped to 0 satellites. EKF position estimator switching to dead reckoning.',
-        source: 'AI_ANOMALY',
-        level: 'CRITICAL',
-      },
-      SEVERE_WIND_SHEAR: {
-        label: 'Severe Crosswind Gust & Turbulence',
-        desc: 'Sudden wind vector shift to 21 m/s inducing high roll moment.',
-        source: 'ENVIRONMENT',
+      // Dual Electronic Ignition (Ducati CDI)
+      IGNITION_A_FAILURE: {
+        label: 'Ducati CDI Ignition Channel A Drop',
+        desc: 'Dual ignition circuit A shutdown; engine operating on Ignition Circuit B only with single-spark RPM drop.',
+        source: 'FAULT_ENGINE',
         level: 'WARN',
       },
-      BAROMETER_DRIFT: {
-        label: 'Barometric Altitude Drift',
-        desc: 'Sensor innovation residual variance triggered by pressure port static obstruction.',
-        source: 'AI_ANOMALY',
+      IGNITION_B_FAILURE: {
+        label: 'Ducati CDI Ignition Channel B Drop',
+        desc: 'Dual ignition circuit B shutdown; engine operating on Ignition Circuit A only with single-spark RPM drop.',
+        source: 'FAULT_ENGINE',
         level: 'WARN',
       },
-      IMU_SENSOR_NOISE: {
-        label: 'IMU Accelerometer Noise Injection',
-        desc: 'Excessive high-frequency vibrations on Z-axis accelerometer.',
-        source: 'AI_ANOMALY',
+      CYLINDER_MISFIRE: {
+        label: 'Cylinder 3 Ignition Misfire',
+        desc: 'Dual CDI spark failure on cylinder 3 causing thermal drop and rotational hunting.',
+        source: 'FAULT_ENGINE',
         level: 'WARN',
       },
+      // Mixed Cooling System
       ENGINE_OVERHEATING: {
         label: 'Engine Thermodynamic Overheating',
         desc: 'CHT and Coolant temperature rapid rise exceeding 135°C thermal limit.',
         source: 'FAULT_ENGINE',
         level: 'CRITICAL',
       },
+      COOLANT_TEMP_RISE: {
+        label: 'Cylinder Head Coolant Loop Thermal Surge',
+        desc: 'Closed-loop coolant exit temperature exceeding 115°C; radiator thermal saturation.',
+        source: 'FAULT_ENGINE',
+        level: 'CRITICAL',
+      },
+      REDUCED_COOLANT_FLOW: {
+        label: 'Coolant Circulation Pump Cavitation / Flow Loss',
+        desc: 'Coolant flow drops below 18 L/min; rapid cylinder head thermal divergence on rear cylinders.',
+        source: 'FAULT_ENGINE',
+        level: 'WARN',
+      },
+      // Dry-Sump Forced Lubrication System
       OIL_PRESSURE_LOSS: {
         label: 'Lubrication Low Oil Pressure',
         desc: 'Oil pump scavenge failure or line loss; pressure dropped below 1.5 bar threshold.',
+        source: 'FAULT_ENGINE',
+        level: 'CRITICAL',
+      },
+      HIGH_OIL_TEMP: {
+        label: 'Oil Cooler Bypass Failure / Thermal Redline',
+        desc: 'Oil temperature surges beyond 130°C redline; thermal viscosity breakdown hazard.',
+        source: 'FAULT_ENGINE',
+        level: 'CRITICAL',
+      },
+      OIL_SYSTEM_DEGRADATION: {
+        label: 'Oil Scavenge Aeration & Chip Detector Warning',
+        desc: 'Foaming in dry-sump tank and fine particulate on magnetic drain plug; fluctuating oil pressure.',
+        source: 'FAULT_ENGINE',
+        level: 'WARN',
+      },
+      // Propeller Reduction Gearbox (2.43:1) & Mechanical
+      GEARBOX_VIBRATION: {
+        label: 'Propeller Reduction Gearbox Mechanical Flutter',
+        desc: 'Gearbox dog clutch overload vibration spike (> 5.5 mm/s) and bearing casing thermal surge.',
+        source: 'FAULT_ENGINE',
+        level: 'CRITICAL',
+      },
+      GEARBOX_TEMP_INCREASE: {
+        label: 'Reduction Gearbox Housing Overheating',
+        desc: 'Gearbox casing temperature exceeding 115°C; tooth friction or inadequate lubrication.',
+        source: 'FAULT_ENGINE',
+        level: 'WARN',
+      },
+      BEARING_DEGRADATION: {
+        label: 'Crankshaft Plain Journal Bearing Wear',
+        desc: 'Hydrodynamic bearing wear inducing 1X vibration harmonics and elevated oil temperature.',
         source: 'FAULT_ENGINE',
         level: 'CRITICAL',
       },
@@ -245,21 +316,29 @@ export class SimulationEngine {
         source: 'FAULT_ENGINE',
         level: 'WARN',
       },
-      FUEL_SYSTEM_LEAK: {
-        label: 'Fuel Supply Rail Pressure Drop & Leak',
-        desc: 'High-pressure injection rail pressure loss accompanied by abnormal fuel consumption rate.',
+      // Exhaust System
+      EXHAUST_RESTRICTION: {
+        label: 'Exhaust Collector / Pre-Turbine Restriction',
+        desc: 'Pre-turbine backpressure surge; EGT rises above 950°C redline and engine power chokes.',
         source: 'FAULT_ENGINE',
         level: 'CRITICAL',
       },
-      TURBO_WASTEGATE_STUCK: {
-        label: 'Turbocharger Wastegate Open / Stuck',
-        desc: 'Wastegate stuck in bypass position; inability to maintain 35.4 inHg boost manifold pressure.',
+      CYLINDER_EGT_IMBALANCE: {
+        label: 'Cylinder Bank EGT Spread Imbalance',
+        desc: 'Combustion bank mixture skew; differential EGT between banks exceeds 85°C.',
         source: 'FAULT_ENGINE',
         level: 'WARN',
       },
-      CYLINDER_MISFIRE: {
-        label: 'Cylinder 3 Ignition Misfire',
-        desc: 'Dual CDI spark failure on cylinder 3 causing thermal drop and rotational hunting.',
+      // Electrical & Generation
+      GENERATOR_FAILURE: {
+        label: 'Integrated 250W AC Generator Cutout',
+        desc: 'Internal AC stator generator loss; avionics and TCU running on buffer battery drain.',
+        source: 'FAULT_ENGINE',
+        level: 'WARN',
+      },
+      ALTERNATOR_FAILURE: {
+        label: 'External 40A Alternator Regulator Dropout',
+        desc: 'Engine-driven 28V alternator dropout; main DC bus voltage sags to battery buffer level.',
         source: 'FAULT_ENGINE',
         level: 'WARN',
       },
@@ -338,20 +417,32 @@ export class SimulationEngine {
     const dt = (this.tickIntervalMs / 1000) * this.simSpeed;
     this.simTime += dt;
 
-    // Check active faults
-    const hasMotor1Fail = this.activeFaults.has('MOTOR_1_FAILURE');
-    const hasMotor3Degrade = this.activeFaults.has('MOTOR_3_DEGRADATION');
-    const hasBatterySag = this.activeFaults.has('BATTERY_SAG');
-    const hasWindShear = this.activeFaults.has('SEVERE_WIND_SHEAR');
-    const hasGpsLoss = this.activeFaults.has('GPS_SIGNAL_LOSS');
-    const hasBaroDrift = this.activeFaults.has('BAROMETER_DRIFT');
-    const hasImuNoise = this.activeFaults.has('IMU_SENSOR_NOISE');
-    const hasOverheating = this.activeFaults.has('ENGINE_OVERHEATING');
-    const hasOilPressureLoss = this.activeFaults.has('OIL_PRESSURE_LOSS');
-    const hasVibAnomaly = this.activeFaults.has('VIBRATION_ANOMALY');
-    const hasFuelLeak = this.activeFaults.has('FUEL_SYSTEM_LEAK');
+    // Check active faults - Rotax 914 F Subsystems
     const hasWastegateStuck = this.activeFaults.has('TURBO_WASTEGATE_STUCK');
+    const hasTcuFault = this.activeFaults.has('TCU_FAULT');
+    const hasTurboOverboost = this.activeFaults.has('TURBO_OVERBOOST');
+    const hasTurboDegrade = this.activeFaults.has('TURBO_DEGRADATION');
+    const hasPump1Fail = this.activeFaults.has('FUEL_PUMP_1_FAILURE');
+    const hasPump2Fail = this.activeFaults.has('FUEL_PUMP_2_FAILURE');
+    const hasCarbImbalance = this.activeFaults.has('CARBURETOR_IMBALANCE');
+    const hasFuelLeak = this.activeFaults.has('FUEL_SYSTEM_LEAK');
+    const hasIgnAFail = this.activeFaults.has('IGNITION_A_FAILURE');
+    const hasIgnBFail = this.activeFaults.has('IGNITION_B_FAILURE');
     const hasCylinderMisfire = this.activeFaults.has('CYLINDER_MISFIRE');
+    const hasOverheating = this.activeFaults.has('ENGINE_OVERHEATING');
+    const hasCoolantRise = this.activeFaults.has('COOLANT_TEMP_RISE');
+    const hasReducedCoolantFlow = this.activeFaults.has('REDUCED_COOLANT_FLOW');
+    const hasOilPressureLoss = this.activeFaults.has('OIL_PRESSURE_LOSS');
+    const hasHighOilTemp = this.activeFaults.has('HIGH_OIL_TEMP');
+    const hasOilDegrade = this.activeFaults.has('OIL_SYSTEM_DEGRADATION');
+    const hasGearboxVib = this.activeFaults.has('GEARBOX_VIBRATION');
+    const hasGearboxOverheat = this.activeFaults.has('GEARBOX_TEMP_INCREASE');
+    const hasBearingDegrade = this.activeFaults.has('BEARING_DEGRADATION');
+    const hasVibAnomaly = this.activeFaults.has('VIBRATION_ANOMALY');
+    const hasExhaustRestrict = this.activeFaults.has('EXHAUST_RESTRICTION');
+    const hasEgtImbalance = this.activeFaults.has('CYLINDER_EGT_IMBALANCE');
+    const hasGenFail = this.activeFaults.has('GENERATOR_FAILURE');
+    const hasAltFail = this.activeFaults.has('ALTERNATOR_FAILURE');
 
     // 1. Waypoint Navigation Kinematics
     const targetWp = SURVEY_WAYPOINTS[this.currentWaypointIndex];
@@ -381,7 +472,7 @@ export class SimulationEngine {
     }
 
     // 2. Realistic Drone Attitude & Movement Dynamics
-    const effectiveWind = hasWindShear ? 21.5 : this.windSpeed;
+    const effectiveWind = this.windSpeed;
     const windRad = (this.windDirection * Math.PI) / 180;
     const windForceX = Math.cos(windRad) * effectiveWind * 0.04;
     const windForceY = Math.sin(windRad) * effectiveWind * 0.04;
@@ -403,18 +494,10 @@ export class SimulationEngine {
     this.targetPitch = targetPitchCalculated;
     this.actualPitch += (this.targetPitch - this.actualPitch) * 0.15;
 
-    // Injected fault disturbance
-    if (hasMotor1Fail) {
-      this.actualRoll += 6.5 * Math.sin(this.simTime * 5.0);
-      this.actualPitch -= 4.2;
-    } else if (hasMotor3Degrade) {
-      this.actualRoll -= 2.8 * Math.sin(this.simTime * 3.2);
-    }
-
     // Velocity integration
     const headingRad = (this.actualYaw * Math.PI) / 180;
     const forwardSpeed = this.targetSpeed + (Math.sin(this.simTime * 0.5) * 0.6);
-    this.actualSpeed = Math.max(0, forwardSpeed - (hasMotor1Fail ? 8.0 : 0));
+    this.actualSpeed = Math.max(0, forwardSpeed);
     
     const vx = Math.cos(headingRad) * this.actualSpeed + windForceX;
     const vy = Math.sin(headingRad) * this.actualSpeed + windForceY;
@@ -425,46 +508,17 @@ export class SimulationEngine {
     // Altitude tracking
     const altDiff = this.targetZ - this.droneZ;
     this.actualVerticalSpeed = altDiff * 0.4 + (Math.sin(this.simTime * 1.5) * 0.15);
-    if (hasMotor1Fail) {
-      this.actualVerticalSpeed -= 1.8; // Loss of lift
-    }
     this.droneZ += this.actualVerticalSpeed * dt;
     if (this.droneZ < 0) this.droneZ = 0;
 
     // 3. Propulsion Motors calculation
-    const baseRpm = hasMotor1Fail ? 8900 : 8420;
+    const baseRpm = 8420;
     const loadPercent = Math.min(100, Math.max(10, 60 + (this.actualSpeed / 20) * 15 + (effectiveWind / 15) * 10));
 
     let m1Rpm = baseRpm + (Math.sin(this.simTime * 10) * 40);
     let m2Rpm = baseRpm + (Math.cos(this.simTime * 10) * 35);
     let m3Rpm = baseRpm + (Math.sin(this.simTime * 8) * 45);
     let m4Rpm = baseRpm + (Math.cos(this.simTime * 8) * 38);
-
-    let m1Status: MotorStatus = 'NORMAL';
-    let m2Status: MotorStatus = 'NORMAL';
-    let m3Status: MotorStatus = 'NORMAL';
-    let m4Status: MotorStatus = 'NORMAL';
-
-    let m1Temp = 41.2 + (loadPercent / 100) * 8;
-    let m2Temp = 40.5 + (loadPercent / 100) * 7.5;
-    let m3Temp = 42.1 + (loadPercent / 100) * 8.2;
-    let m4Temp = 41.0 + (loadPercent / 100) * 7.8;
-
-    if (hasMotor1Fail) {
-      m1Rpm = 0;
-      m1Status = 'FAULT';
-      m1Temp = 29.0;
-      // Other motors ramp up
-      m2Rpm = 9650;
-      m3Rpm = 9780;
-      m4Rpm = 9520;
-    }
-
-    if (hasMotor3Degrade) {
-      m3Rpm = 6850 + Math.sin(this.simTime * 20) * 400; // RPM flutter
-      m3Status = 'DEGRADED';
-      m3Temp = 68.5; // High coil heat
-    }
 
     const motors: [MotorTelemetry, MotorTelemetry, MotorTelemetry, MotorTelemetry] = [
       {
@@ -473,13 +527,13 @@ export class SimulationEngine {
         position: 'Front-Right',
         direction: 'CCW',
         rpm: Math.round(m1Rpm),
-        loadPercent: Math.round(hasMotor1Fail ? 0 : loadPercent + 2),
-        current: hasMotor1Fail ? 0.0 : parseFloat((2.1 * (loadPercent / 60)).toFixed(1)),
+        loadPercent: Math.round(loadPercent + 2),
+        current: parseFloat((2.1 * (loadPercent / 60)).toFixed(1)),
         voltage: 22.8,
-        power: hasMotor1Fail ? 0 : parseFloat((47.8 * (loadPercent / 60)).toFixed(1)),
-        temperature: parseFloat(m1Temp.toFixed(1)),
-        status: m1Status,
-        vibrationLevel: hasMotor1Fail ? 4.8 : 0.8,
+        power: parseFloat((47.8 * (loadPercent / 60)).toFixed(1)),
+        temperature: parseFloat((41.2 + (loadPercent / 100) * 8).toFixed(1)),
+        status: 'NORMAL',
+        vibrationLevel: 0.8,
       },
       {
         id: 2,
@@ -487,12 +541,12 @@ export class SimulationEngine {
         position: 'Front-Left',
         direction: 'CW',
         rpm: Math.round(m2Rpm),
-        loadPercent: Math.round(hasMotor1Fail ? 92 : loadPercent - 1),
-        current: parseFloat((2.1 * (hasMotor1Fail ? 1.5 : loadPercent / 60)).toFixed(1)),
+        loadPercent: Math.round(loadPercent - 1),
+        current: parseFloat((2.1 * (loadPercent / 60)).toFixed(1)),
         voltage: 22.8,
-        power: parseFloat((47.8 * (hasMotor1Fail ? 1.5 : loadPercent / 60)).toFixed(1)),
-        temperature: parseFloat(m2Temp.toFixed(1)),
-        status: m2Status,
+        power: parseFloat((47.8 * (loadPercent / 60)).toFixed(1)),
+        temperature: parseFloat((40.5 + (loadPercent / 100) * 7.5).toFixed(1)),
+        status: 'NORMAL',
         vibrationLevel: 0.9,
       },
       {
@@ -501,13 +555,13 @@ export class SimulationEngine {
         position: 'Rear-Right',
         direction: 'CW',
         rpm: Math.round(m3Rpm),
-        loadPercent: Math.round(hasMotor3Degrade ? 45 : hasMotor1Fail ? 95 : loadPercent + 3),
-        current: parseFloat((2.1 * (hasMotor3Degrade ? 3.4 : loadPercent / 60)).toFixed(1)),
+        loadPercent: Math.round(loadPercent + 3),
+        current: parseFloat((2.1 * (loadPercent / 60)).toFixed(1)),
         voltage: 22.8,
-        power: parseFloat((47.8 * (hasMotor3Degrade ? 3.2 : loadPercent / 60)).toFixed(1)),
-        temperature: parseFloat(m3Temp.toFixed(1)),
-        status: m3Status,
-        vibrationLevel: hasMotor3Degrade ? 6.2 : 0.8,
+        power: parseFloat((47.8 * (loadPercent / 60)).toFixed(1)),
+        temperature: parseFloat((42.1 + (loadPercent / 100) * 8.2).toFixed(1)),
+        status: 'NORMAL',
+        vibrationLevel: 0.8,
       },
       {
         id: 4,
@@ -515,12 +569,12 @@ export class SimulationEngine {
         position: 'Rear-Left',
         direction: 'CCW',
         rpm: Math.round(m4Rpm),
-        loadPercent: Math.round(hasMotor1Fail ? 90 : loadPercent),
-        current: parseFloat((2.1 * (hasMotor1Fail ? 1.4 : loadPercent / 60)).toFixed(1)),
+        loadPercent: Math.round(loadPercent),
+        current: parseFloat((2.1 * (loadPercent / 60)).toFixed(1)),
         voltage: 22.8,
-        power: parseFloat((47.8 * (hasMotor1Fail ? 1.4 : loadPercent / 60)).toFixed(1)),
-        temperature: parseFloat(m4Temp.toFixed(1)),
-        status: m4Status,
+        power: parseFloat((47.8 * (loadPercent / 60)).toFixed(1)),
+        temperature: parseFloat((41.0 + (loadPercent / 100) * 7.8).toFixed(1)),
+        status: 'NORMAL',
         vibrationLevel: 0.9,
       },
     ];
@@ -530,16 +584,15 @@ export class SimulationEngine {
 
     // 4. Battery drain dynamics
     const drainPerSec = (totalCurrent / (this.batteryCapacityMah / 1000)) * (100 / 3600);
-    const sagFactor = hasBatterySag ? 4.5 : 1.0;
-    this.batteryPct = Math.max(0, this.batteryPct - drainPerSec * dt * sagFactor);
+    this.batteryPct = Math.max(0, this.batteryPct - drainPerSec * dt);
     
     // Voltage curve for 6S LiPo
     const baseVoltage = 19.8 + (this.batteryPct / 100) * 5.4; // 19.8V empty to 25.2V full
-    this.batteryVoltage = hasBatterySag ? baseVoltage - 2.1 : baseVoltage - (totalCurrent * 0.04);
+    this.batteryVoltage = baseVoltage - (totalCurrent * 0.04);
     
     // BMS temperature
-    this.batteryTemp = hasBatterySag ? 54.2 : 32.0 + (totalCurrent / 10) * 3.5;
-    const remainingMinutes = this.batteryPct > 0 ? (this.batteryPct / (drainPerSec * 60 * sagFactor)) : 0;
+    this.batteryTemp = 32.0 + (totalCurrent / 10) * 3.5;
+    const remainingMinutes = this.batteryPct > 0 ? (this.batteryPct / (drainPerSec * 60)) : 0;
 
     // 5. Geographic coordinates translation
     // 1 deg Lat approx 111,000m, 1 deg Lon approx 88,000m at 37.7 deg N
@@ -564,60 +617,112 @@ export class SimulationEngine {
     }
 
     // EKF & Sensor Simulation
-    const baroAlt = hasBaroDrift ? this.droneZ + 14.8 : this.droneZ + (Math.sin(this.simTime * 3) * 0.1);
-    const gpsSats = hasGpsLoss ? 0 : 18;
-    const gpsHdop = hasGpsLoss ? 9.99 : 0.74;
+    const baroAlt = this.droneZ + (Math.sin(this.simTime * 3) * 0.1);
+    const gpsSats = 18;
+    const gpsHdop = 0.74;
 
-    const noiseMultiplier = hasImuNoise ? 5.5 : 1.0;
+    const noiseMultiplier = 1.0;
 
-    const systemStatus: SystemStatus = hasMotor1Fail || hasBatterySag || hasGpsLoss || hasOverheating || hasOilPressureLoss
+    const hasCriticalFault = hasOverheating || hasOilPressureLoss || hasGearboxVib || hasCoolantRise || hasTurboOverboost || hasExhaustRestrict || hasFuelLeak || hasBearingDegrade || hasHighOilTemp;
+    const hasWarningFault = hasWastegateStuck || hasTcuFault || hasTurboDegrade || hasPump1Fail || hasPump2Fail || hasCarbImbalance || hasIgnAFail || hasIgnBFail || hasCylinderMisfire || hasReducedCoolantFlow || hasOilDegrade || hasGearboxOverheat || hasVibAnomaly || hasEgtImbalance || hasGenFail || hasAltFail;
+
+    const systemStatus: SystemStatus = hasCriticalFault
       ? 'CRITICAL'
-      : hasMotor3Degrade || hasWindShear || hasBaroDrift || hasVibAnomaly || hasFuelLeak || hasWastegateStuck || hasCylinderMisfire
+      : hasWarningFault
       ? 'WARNING'
       : 'NORMAL';
 
-    const flightMode: FlightMode = hasMotor1Fail ? 'FAILSAFE' : 'AUTO';
+    const flightMode: FlightMode = hasCriticalFault ? 'FAILSAFE' : 'AUTO';
 
-    // 7. AERO-PISTON ENGINE DIGITAL TWIN CALCULATIONS (ROTAX 914F)
+    // 7. AERO-PISTON ENGINE DIGITAL TWIN CALCULATIONS (ROTAX 914 F)
+    const altMsl = parseFloat((APP_CONFIG.baseCoordinates.altMsl + this.droneZ).toFixed(1));
+    const ambientPressHpa = parseFloat((1013.25 * Math.pow(Math.max(0.1, 1 - 0.0000225577 * altMsl), 5.25588)).toFixed(1));
+    const ambientPressInHg = parseFloat((ambientPressHpa * 0.02953).toFixed(2));
+    const ambientPressBar = parseFloat((ambientPressHpa / 1000).toFixed(3));
+    const densityAltitudeM = Math.round(altMsl + (15 - this.ambientTemp) * 36.6);
+
+    const flightPhase: 'GROUND' | 'CLIMB' | 'CRUISE' | 'DESCENT' | 'APPROACH' = 
+      this.droneZ < 1 ? 'GROUND' :
+      this.actualVerticalSpeed > 1.5 ? 'CLIMB' :
+      this.actualVerticalSpeed < -1.5 ? 'DESCENT' : 'CRUISE';
+
     const commandedThrottle = this.engineThrottle;
-    const effectiveThrottle = Math.max(30, Math.min(100, commandedThrottle + (this.actualVerticalSpeed * 4.5)));
-    const engineLoad = Math.max(20, Math.min(100, 45 + (effectiveThrottle / 100) * 45 + (hasWindShear ? 8 : 0)));
+    // Rotax 914 F throttle travel includes 104% continuous power detent and 115% takeoff (manual p. 95)
+    const effectiveThrottle = Math.max(30, Math.min(115, commandedThrottle + (this.actualVerticalSpeed * 4.0)));
+    const engineLoad = Math.max(20, Math.min(100, 42 + (effectiveThrottle / 115) * 55));
 
-    // Rotax 914F nominal speed: 4,200 - 5,800 RPM
-    const baseEngineRpm = 4200 + (effectiveThrottle / 100) * 1550;
-    let actualEngineRpm = baseEngineRpm + (Math.sin(this.simTime * 8) * 15);
+    // Rotax 914 F Engine RPM: Idle 1400, Cruise 4800-5200, Takeoff 5800 RPM
+    const baseEngineRpm = 1400 + (effectiveThrottle / 115) * 4400;
+    let actualEngineRpm = baseEngineRpm + (Math.sin(this.simTime * 8) * 14);
     if (hasCylinderMisfire) {
-      actualEngineRpm -= 450 + Math.sin(this.simTime * 25) * 120;
+      actualEngineRpm -= 420 + Math.sin(this.simTime * 24) * 110;
+    }
+    if (hasIgnAFail || hasIgnBFail) {
+      actualEngineRpm -= 75; // Standard mag/CDI drop on single ignition
+    }
+    if (hasCarbImbalance) {
+      actualEngineRpm -= 85;
+    }
+    if (hasExhaustRestrict) {
+      actualEngineRpm -= 280;
+    }
+    if (hasTurboDegrade) {
+      actualEngineRpm -= 160;
     }
     const targetRpm = Math.round(baseEngineRpm);
     const rpmError = targetRpm - Math.round(actualEngineRpm);
     const crankshaftSpeed = parseFloat(((actualEngineRpm * 2 * Math.PI) / 60).toFixed(1)); // rad/s
 
-    // Torque and Power Output (Rotax 914F: 144 Nm max torque, 84.5 kW / 115 HP max takeoff)
-    const torque = parseFloat((110 + (engineLoad / 100) * 32.5 + Math.sin(this.simTime * 2) * 1.5).toFixed(1));
+    // Propeller Speed Reduction Gearbox: i = 2.42857 (51T / 21T) per Manual Section 20.1
+    const GEAR_REDUCTION_RATIO = 2.42857;
+    const propRpm = Math.round(actualEngineRpm / GEAR_REDUCTION_RATIO);
+
+    // Torque & Power Output (Rotax 914 F: 144 Nm max torque @ 4,900 RPM, 84.5 kW / 115 HP max takeoff)
+    let powerDerating = 1.0;
+    if (hasWastegateStuck || hasTcuFault) powerDerating *= 0.72;
+    if (hasTurboDegrade) powerDerating *= 0.80;
+    if (hasExhaustRestrict) powerDerating *= 0.75;
+    if (hasCylinderMisfire) powerDerating *= 0.78;
+    const torque = parseFloat((actualEngineRpm < 50 ? 0 : (102 + (engineLoad / 100) * 38.5 + Math.sin(this.simTime * 2) * 1.5) * powerDerating).toFixed(1));
     const powerKw = parseFloat(((torque * crankshaftSpeed) / 1000).toFixed(1));
     const powerHp = parseFloat((powerKw * 1.34102).toFixed(1));
 
-    // Manifold Absolute Pressure (MAP) & Turbocharger Induction Loop
-    const ambientPressInHg = (1008.4 - (this.droneZ / 8.5)) * 0.02953;
-    let targetMapInHg = 28.0 + (effectiveThrottle / 100) * 11.5;
-    if (hasWastegateStuck) {
-      targetMapInHg = ambientPressInHg; // loss of turbocharger boost
+    // Turbocharger & Wastegate Induction Loop (TCU Automatic Regulation)
+    // Physical chain: Throttle -> Engine Load -> Exhaust Energy -> Turbocharger -> Boost -> MAP
+    let targetMapInHg = 28.5 + (effectiveThrottle / 115) * 10.5; // Up to 39.0 inHg takeoff
+    if (hasTurboOverboost) {
+      targetMapInHg = 43.8; // Jammed closed overboost
+    } else if (hasWastegateStuck || hasTcuFault) {
+      targetMapInHg = ambientPressInHg * 0.94; // Loss of boost: manifold vacuum
+    } else if (hasTurboDegrade) {
+      targetMapInHg = Math.min(31.2, targetMapInHg);
     }
-    const mapInHg = parseFloat((targetMapInHg + Math.sin(this.simTime * 3) * 0.2).toFixed(1));
+    const mapInHg = parseFloat((targetMapInHg + Math.sin(this.simTime * 3) * 0.18).toFixed(1));
     const mapBar = parseFloat((mapInHg * 0.0338639).toFixed(2));
-    const boostDeltaBar = parseFloat(Math.max(0, mapBar - (ambientPressInHg * 0.0338639)).toFixed(2));
-    const wastegatePct = hasWastegateStuck ? 100 : Math.round(Math.max(0, Math.min(100, 20 + (effectiveThrottle / 100) * 60)));
-    const airMassFlow = parseFloat((80 + (engineLoad / 100) * 125 + (mapBar * 20)).toFixed(1));
-    const iatC = parseFloat((24 + (engineLoad / 100) * 18 + (boostDeltaBar * 12)).toFixed(1));
+    const boostDeltaBar = parseFloat(Math.max(0, mapBar - ambientPressBar).toFixed(2));
 
-    // Fuel System Dynamics (BSFC approx 285 g/kWh, density 0.74 kg/L)
-    const baseFuelFlow = (powerKw * 0.285) / 0.74;
+    // TCU automatically modulates wastegate to compensate for altitude ambient pressure drop
+    const wastegatePct = hasTurboOverboost
+      ? 0
+      : hasWastegateStuck
+      ? 100
+      : hasTcuFault
+      ? 85
+      : Math.round(Math.max(8, Math.min(95, 78 - (boostDeltaBar / 0.35) * 55 + (altMsl / 4800) * -12)));
+    const wastegateCmd = hasTurboOverboost ? 100 : hasWastegateStuck ? 20 : wastegatePct;
+    const airMassFlow = parseFloat((actualEngineRpm < 50 ? 0 : 75 + (engineLoad / 100) * 135 + (boostDeltaBar * 35)).toFixed(1));
+    const iatC = parseFloat((24.0 + (engineLoad / 100) * 16 + (boostDeltaBar * 14) + (hasTurboOverboost ? 28.0 : 0)).toFixed(1));
+    const airboxTempC = parseFloat((iatC + (boostDeltaBar * 12)).toFixed(1));
+    const turboRpm = Math.round(actualEngineRpm < 50 ? 0 : hasTurboDegrade ? 58000 : 38000 + (powerKw / 84.5) * 88000 + Math.sin(this.simTime * 5) * 1200);
+
+    // Fuel System Dynamics (Rotax 914 F: 2 Electric Vane Pumps & Regulated Pressure)
+    // Fuel pressure is dynamically held at Airbox Pressure + 0.25 bar (nominal per manual p. 85)
+    const baseFuelFlow = (powerKw * 0.285) / 0.74; // BSFC ~285 g/kWh
     let fuelFlowLh = parseFloat(Math.max(6.5, baseFuelFlow + (Math.sin(this.simTime * 2.5) * 0.4)).toFixed(1));
-    let fuelPressureBar = 3.2;
+    let fuelPressureBar = parseFloat((mapBar + 0.25 + (hasPump1Fail ? -0.12 : 0) + (hasPump2Fail ? -0.04 : 0) + (Math.sin(this.simTime * 4) * 0.02)).toFixed(2));
     if (hasFuelLeak) {
       fuelFlowLh = parseFloat((fuelFlowLh * 1.6).toFixed(1));
-      fuelPressureBar = 1.8;
+      fuelPressureBar = 1.78;
     }
     const fuelBurnPerSec = fuelFlowLh / 3600;
     this.fuelRemainingL = Math.max(0, this.fuelRemainingL - fuelBurnPerSec * dt);
@@ -625,19 +730,27 @@ export class SimulationEngine {
     const fuelRemainingPct = parseFloat(((this.fuelRemainingL / 90.0) * 100).toFixed(1));
     const airFuelRatio = parseFloat((14.7 + Math.sin(this.simTime * 1.2) * 0.2).toFixed(2));
     const lambdaVal = parseFloat((airFuelRatio / 14.7).toFixed(2));
-    const injectionTimingBtdc = parseFloat((24.0 + (effectiveThrottle / 100) * 4.0).toFixed(1));
-    const injectionDurationMs = parseFloat((2.5 + (engineLoad / 100) * 3.5).toFixed(2));
 
-    // Combustion & Thermal Dynamics (Per-Cylinder CHT & EGT)
-    const overheatFactor = hasOverheating ? 45.0 : 0.0;
-    const misfireFactor = hasCylinderMisfire ? -35.0 : 0.0;
-    const baseCht = 92.0 + (engineLoad / 100) * 32.0 + overheatFactor;
-    const cyl1Cht = parseFloat((baseCht + 1.8 + Math.sin(this.simTime * 0.7) * 0.5).toFixed(1));
-    const cyl2Cht = parseFloat((baseCht - 1.2 + Math.cos(this.simTime * 0.8) * 0.4).toFixed(1));
-    const cyl3Cht = parseFloat((baseCht + misfireFactor + 0.6 + Math.sin(this.simTime * 0.9) * 0.5).toFixed(1));
-    const cyl4Cht = parseFloat((baseCht - 0.9 + Math.cos(this.simTime * 0.6) * 0.4).toFixed(1));
+    // Dual Bing 64 Constant-Depression Carburetors Telemetry
+    const carbSlide1 = Math.round(Math.min(100, (airMassFlow / 240) * 100));
+    const carbSlide2 = Math.round(carbSlide1 + (hasCylinderMisfire ? -14 : hasCarbImbalance ? -22 : 0) + Math.sin(this.simTime * 2) * 1.2);
+    const carbBalance = hasCylinderMisfire ? 82.5 : hasCarbImbalance ? 71.4 : 98.8;
+
+    // 4-Cylinder Boxer Combustion Dynamics (Per-Cylinder CHT & EGT)
+    // Cyl 1: Left Front, Cyl 2: Right Front (Primary sensor), Cyl 3: Left Rear, Cyl 4: Right Rear
+    const overheatFactor = hasOverheating ? 46.0 : 0.0;
+    const misfireFactor = hasCylinderMisfire ? -42.0 : 0.0;
+    const coolantFlowReductionCht = hasReducedCoolantFlow ? 38.0 : 0.0;
+    const exhaustRestrictCht = hasExhaustRestrict ? 24.0 : 0.0;
+    const baseCht = 94.0 + (engineLoad / 100) * 30.0 + overheatFactor + exhaustRestrictCht;
+    const cyl1Cht = parseFloat((baseCht + 1.2 + Math.sin(this.simTime * 0.7) * 0.5).toFixed(1));
+    const cyl2Cht = parseFloat((baseCht + 3.8 + Math.cos(this.simTime * 0.8) * 0.4).toFixed(1)); // Primary sensor hottest
+    const cyl3Cht = parseFloat((baseCht + misfireFactor + coolantFlowReductionCht - 0.4 + Math.sin(this.simTime * 0.9) * 0.5).toFixed(1));
+    const cyl4Cht = parseFloat((baseCht + coolantFlowReductionCht - 1.1 + Math.cos(this.simTime * 0.6) * 0.4).toFixed(1));
     const avgCht = parseFloat(((cyl1Cht + cyl2Cht + cyl3Cht + cyl4Cht) / 4).toFixed(1));
-    const maxChtDev = parseFloat((Math.max(cyl1Cht, cyl2Cht, cyl3Cht, cyl4Cht) - Math.min(cyl1Cht, cyl2Cht, cyl3Cht, cyl4Cht)).toFixed(1));
+    const maxCht = Math.max(cyl1Cht, cyl2Cht, cyl3Cht, cyl4Cht);
+    const minCht = Math.min(cyl1Cht, cyl2Cht, cyl3Cht, cyl4Cht);
+    const chtSpread = parseFloat((maxCht - minCht).toFixed(1));
     const chtDeviations: [number, number, number, number] = [
       parseFloat((cyl1Cht - avgCht).toFixed(1)),
       parseFloat((cyl2Cht - avgCht).toFixed(1)),
@@ -645,13 +758,16 @@ export class SimulationEngine {
       parseFloat((cyl4Cht - avgCht).toFixed(1)),
     ];
 
-    const baseEgt = 710.0 + (engineLoad / 100) * 95.0 + (hasOverheating ? 65.0 : 0.0);
-    const cyl1Egt = Math.round(baseEgt + 6.0 + Math.sin(this.simTime * 1.5) * 3.0);
-    const cyl2Egt = Math.round(baseEgt - 5.0 + Math.cos(this.simTime * 1.7) * 2.5);
-    const cyl3Egt = Math.round(baseEgt + (hasCylinderMisfire ? -120 : 3.0) + Math.sin(this.simTime * 1.9) * 3.0);
-    const cyl4Egt = Math.round(baseEgt - 3.0 + Math.cos(this.simTime * 1.3) * 2.5);
+    const baseEgt = 720.0 + (engineLoad / 100) * 92.0 + (hasOverheating ? 68.0 : 0.0) + (hasExhaustRestrict ? 175.0 : 0.0);
+    const egtBankSkew = hasEgtImbalance ? 65.0 : 0.0;
+    const cyl1Egt = Math.round(baseEgt + egtBankSkew + 5.0 + Math.sin(this.simTime * 1.5) * 3.0);
+    const cyl2Egt = Math.round(baseEgt - egtBankSkew - 4.0 + Math.cos(this.simTime * 1.7) * 2.5);
+    const cyl3Egt = Math.round(baseEgt + egtBankSkew + (hasCylinderMisfire ? -135 : 4.0) + Math.sin(this.simTime * 1.9) * 3.0);
+    const cyl4Egt = Math.round(baseEgt - egtBankSkew - 2.0 + Math.cos(this.simTime * 1.3) * 2.5);
     const avgEgt = Math.round((cyl1Egt + cyl2Egt + cyl3Egt + cyl4Egt) / 4);
-    const maxEgtDev = Math.max(cyl1Egt, cyl2Egt, cyl3Egt, cyl4Egt) - Math.min(cyl1Egt, cyl2Egt, cyl3Egt, cyl4Egt);
+    const maxEgt = Math.max(cyl1Egt, cyl2Egt, cyl3Egt, cyl4Egt);
+    const minEgt = Math.min(cyl1Egt, cyl2Egt, cyl3Egt, cyl4Egt);
+    const egtSpread = maxEgt - minEgt;
     const egtDeviations: [number, number, number, number] = [
       cyl1Egt - avgEgt,
       cyl2Egt - avgEgt,
@@ -659,27 +775,36 @@ export class SimulationEngine {
       cyl4Egt - avgEgt,
     ];
 
-    // Lubrication System
-    let oilPressureBar = parseFloat((2.8 + (actualEngineRpm / 5800) * 1.8 + Math.sin(this.simTime * 4) * 0.05).toFixed(2));
+    // Dry-Sump Lubrication System (Separate Oil Tank + Main Pump + Scavenge Pump)
+    let oilPressureBar = parseFloat((2.8 + (actualEngineRpm / 5800) * 1.8 + Math.sin(this.simTime * 4) * 0.04).toFixed(2));
     if (hasOilPressureLoss) {
-      oilPressureBar = parseFloat(Math.max(0.6, 1.1 + Math.sin(this.simTime * 5) * 0.1).toFixed(2));
+      oilPressureBar = parseFloat(Math.max(0.6, 1.1 + Math.sin(this.simTime * 5) * 0.08).toFixed(2));
+    } else if (hasHighOilTemp) {
+      oilPressureBar = parseFloat(Math.max(1.2, oilPressureBar - 1.4).toFixed(2));
+    } else if (hasBearingDegrade) {
+      oilPressureBar = parseFloat(Math.max(1.4, oilPressureBar - 0.8).toFixed(2));
+    } else if (hasOilDegrade) {
+      oilPressureBar = parseFloat((oilPressureBar + Math.sin(this.simTime * 6) * 0.6).toFixed(2));
     }
     const expectedOilPressure = parseFloat((2.8 + (targetRpm / 5800) * 1.8).toFixed(2));
     const oilPressureDeviation = parseFloat((expectedOilPressure - oilPressureBar).toFixed(2));
-    const oilTempC = parseFloat((82.0 + (engineLoad / 100) * 24.0 + (hasOverheating || hasOilPressureLoss ? 32.0 : 0.0)).toFixed(1));
-    const oilFlowRateLmin = parseFloat((4.5 + (actualEngineRpm / 5800) * 3.2).toFixed(1));
+    const oilTempC = parseFloat((82.0 + (engineLoad / 100) * 22.0 + (hasOverheating || hasOilPressureLoss ? 34.0 : 0.0) + (hasHighOilTemp ? 48.0 : 0.0) + (hasBearingDegrade ? 18.0 : 0.0)).toFixed(1));
+    const oilFlowRateLmin = parseFloat((4.8 + (actualEngineRpm / 5800) * 3.2).toFixed(1));
 
-    // Cooling System (Liquid Heads + Ram Air Cylinders)
-    const coolantTempC = parseFloat((80.0 + (engineLoad / 100) * 18.0 + (hasOverheating ? 28.0 : 0.0)).toFixed(1));
-    const coolantPressureBar = parseFloat((1.15 + (engineLoad / 100) * 0.15).toFixed(2));
-    const coolantFlowLmin = parseFloat((14.0 + (actualEngineRpm / 5800) * 6.5).toFixed(1));
-    const radiatorTempC = parseFloat((coolantTempC - 18.0).toFixed(1));
+    // Mixed Cooling System (Liquid Heads + Ram-Air Cylinders)
+    const coolantTempC = parseFloat((82.0 + (engineLoad / 100) * 18.0 + (hasOverheating ? 30.0 : 0.0) + (hasCoolantRise ? 36.0 : 0.0)).toFixed(1));
+    const coolantPressureBar = parseFloat((1.16 + (engineLoad / 100) * 0.14 + (hasCoolantRise ? 0.35 : 0)).toFixed(2));
+    const coolantFlowLmin = parseFloat(((20.0 + (actualEngineRpm / 5800) * 40.0) * (hasReducedCoolantFlow ? 0.32 : 1.0)).toFixed(1)); // ~60 L/min max per manual
+    const radiatorTempC = parseFloat((coolantTempC - 17.5).toFixed(1));
+    const cylinderWallTempC = parseFloat((125.0 + (engineLoad / 100) * 42.0 + (hasOverheating ? 45.0 : 0.0) + (hasCoolantRise ? 22.0 : 0)).toFixed(1)); // max 200°C
 
-    // Vibration Dynamics (Tri-Axial & RMS)
+    // Tri-Axial & RMS Mechanical Vibration Dynamics
     const baseVibRms = 1.6 + (actualEngineRpm / 5800) * 0.8;
     let vibRms = parseFloat((baseVibRms + Math.sin(this.simTime * 12) * 0.1).toFixed(2));
     if (hasVibAnomaly || hasCylinderMisfire) {
       vibRms = parseFloat((5.8 + Math.sin(this.simTime * 18) * 0.8).toFixed(2));
+    } else if (hasBearingDegrade) {
+      vibRms = parseFloat((6.75 + Math.sin(this.simTime * 16) * 0.6).toFixed(2));
     }
     const vibX = parseFloat((vibRms * 0.85 + Math.sin(this.simTime * 14) * 0.08).toFixed(2));
     const vibY = parseFloat((vibRms * 0.72 + Math.cos(this.simTime * 16) * 0.08).toFixed(2));
@@ -689,55 +814,99 @@ export class SimulationEngine {
     const vibBaseline = 1.8;
     const vibDeviation = parseFloat((vibRms - vibBaseline).toFixed(2));
 
-    // Ignition System (Dual Electronic CDI)
-    const ignitionTimingDeg = parseFloat((22.0 + (actualEngineRpm / 5800) * 6.0).toFixed(1));
+    // Dual Electronic Ignition (Ducati CDI)
+    const ignitionTimingDeg = parseFloat((22.0 + (actualEngineRpm / 5800) * 4.0).toFixed(1));
     const ignitionAdvanceDeg = parseFloat((ignitionTimingDeg - 20.0).toFixed(1));
     const sparkPlugA: ['OK'|'FAULT', 'OK'|'FAULT', 'OK'|'FAULT', 'OK'|'FAULT'] = [
-      'OK', 'OK', hasCylinderMisfire ? 'FAULT' : 'OK', 'OK'
+      hasIgnAFail ? 'FAULT' : 'OK',
+      hasIgnAFail ? 'FAULT' : 'OK',
+      hasIgnAFail || hasCylinderMisfire ? 'FAULT' : 'OK',
+      hasIgnAFail ? 'FAULT' : 'OK',
     ];
     const sparkPlugB: ['OK'|'FAULT', 'OK'|'FAULT', 'OK'|'FAULT', 'OK'|'FAULT'] = [
-      'OK', 'OK', 'OK', 'OK'
+      hasIgnBFail ? 'FAULT' : 'OK',
+      hasIgnBFail ? 'FAULT' : 'OK',
+      hasIgnBFail ? 'FAULT' : 'OK',
+      hasIgnBFail ? 'FAULT' : 'OK',
     ];
 
-    // Electrical (28V DC Bus & Rotax Alternator)
-    const alternatorVoltage = 28.4;
-    const alternatorCurrent = parseFloat((11.5 + (engineLoad / 100) * 4.5).toFixed(1));
+    // Electrical System (Integrated 250W AC Generator + Optional Alternator)
+    const alternatorVoltage = hasAltFail ? 24.1 : 28.4;
+    const alternatorCurrent = hasAltFail ? 0.0 : parseFloat((11.5 + (engineLoad / 100) * 4.5).toFixed(1));
     const electricalPowerW = parseFloat((alternatorVoltage * alternatorCurrent).toFixed(1));
     const electricalLoadPct = Math.round((alternatorCurrent / 20.0) * 100);
 
-    // Engine Life & Wear Metrics
+    // Operational Modes & Provenance
+    const engineMode: EngineOperatingMode =
+      hasOverheating || hasOilPressureLoss || hasVibAnomaly || hasFuelLeak || hasWastegateStuck || hasCylinderMisfire || hasTurboOverboost || hasExhaustRestrict || hasBearingDegrade || hasHighOilTemp
+        ? 'ABNORMAL'
+        : effectiveThrottle > 105
+        ? 'TAKEOFF'
+        : flightPhase === 'CLIMB'
+        ? 'CLIMB'
+        : flightPhase === 'DESCENT'
+        ? 'DESCENT'
+        : actualEngineRpm > 4200
+        ? 'CRUISE'
+        : actualEngineRpm > 1800
+        ? 'TAXI'
+        : actualEngineRpm > 200
+        ? 'IDLE'
+        : 'OFF';
+
+    const bsfc = parseFloat(((fuelFlowLh * 0.74 * 1000) / Math.max(1, powerKw)).toFixed(1));
+
+    // Engine Hours & Maintenance Logging
     this.engineHours += (dt / 3600);
     this.engineFlightHours += (dt / 3600);
     const degradationIndex = parseFloat(Math.min(1.0, 0.076 + (this.engineHours - 1420.0) * 0.0005).toFixed(4));
     const healthIndex = hasOilPressureLoss
       ? 18.5
-      : hasOverheating
+      : hasOverheating || hasCoolantRise
       ? 34.0
+      : hasTurboOverboost
+      ? 28.0
+      : hasGearboxVib
+      ? 38.0
+      : hasExhaustRestrict
+      ? 32.0
+      : hasBearingDegrade
+      ? 36.0
       : hasFuelLeak
       ? 46.0
+      : hasHighOilTemp
+      ? 42.0
       : hasVibAnomaly
       ? 52.0
       : hasCylinderMisfire
       ? 58.0
-      : hasWastegateStuck
+      : hasWastegateStuck || hasTcuFault
       ? 68.0
+      : hasCarbImbalance || hasIgnAFail || hasIgnBFail
+      ? 74.0
       : 94.2;
-    const anomalyScore = hasOilPressureLoss
+
+    const anomalyScore = hasOilPressureLoss || hasTurboOverboost || hasExhaustRestrict
       ? 0.98
-      : hasOverheating
-      ? 0.92
-      : hasFuelLeak
-      ? 0.78
-      : hasVibAnomaly
-      ? 0.72
-      : hasCylinderMisfire
-      ? 0.65
-      : hasWastegateStuck
-      ? 0.45
+      : hasOverheating || hasCoolantRise || hasBearingDegrade
+      ? 0.94
+      : hasGearboxVib || hasHighOilTemp || hasFuelLeak
+      ? 0.88
+      : hasVibAnomaly || hasCylinderMisfire
+      ? 0.68
+      : hasWastegateStuck || hasTcuFault || hasCarbImbalance
+      ? 0.48
       : 0.03;
 
-    // Assemble Unified Aero-Piston Engine Model
+    // Assemble Unified Aero-Piston Engine Model (Rotax 914 F Specific)
     const engine: AeroEngineTelemetry = {
+      identity: {
+        model: 'Rotax 914 F',
+        manufacturer: 'BRP-Rotax',
+        serialNumber: 'SN-914-4420188',
+        configuration: 'Configuration 3 (Governor & Vacuum Prepared)',
+        tboHours: 2000,
+      },
       operating: {
         rpm: Math.round(actualEngineRpm),
         targetRpm,
@@ -753,37 +922,221 @@ export class SimulationEngine {
         lambda: lambdaVal,
         map: mapInHg,
         iat: iatC,
-        ambientPressure: parseFloat((1008.4 - (this.droneZ / 8.5)).toFixed(1)),
+        ambientPressure: ambientPressHpa,
         ambientTemperature: this.ambientTemp,
+        operatingMode: engineMode,
+        startStopState: actualEngineRpm > 400 ? 'RUNNING' : 'OFF',
+        bsfcGkwh: bsfc,
+        powerToWeightRatioKwPerKg: parseFloat((powerKw / 74.4).toFixed(3)),
+      },
+      cylinders: {
+        cylinder_1: {
+          id: 1,
+          name: 'Cylinder 1 (Left Front)',
+          bank: 'LEFT',
+          position: 'FRONT',
+          cht: cyl1Cht,
+          egt: cyl1Egt,
+          combustionHealth: 95,
+          misfireIndication: false,
+          chtDeviation: parseFloat((cyl1Cht - avgCht).toFixed(1)),
+          egtDeviation: cyl1Egt - avgEgt,
+          cylinderHealth: 95,
+          anomalyScore: 0.03,
+        },
+        cylinder_2: {
+          id: 2,
+          name: 'Cylinder 2 (Right Front - Primary Sensor)',
+          bank: 'RIGHT',
+          position: 'FRONT',
+          cht: cyl2Cht,
+          egt: cyl2Egt,
+          combustionHealth: hasOverheating ? 52 : 94,
+          misfireIndication: false,
+          chtDeviation: parseFloat((cyl2Cht - avgCht).toFixed(1)),
+          egtDeviation: cyl2Egt - avgEgt,
+          cylinderHealth: hasOverheating ? 64 : 94,
+          anomalyScore: hasOverheating ? 0.92 : 0.04,
+        },
+        cylinder_3: {
+          id: 3,
+          name: 'Cylinder 3 (Left Rear - Secondary Sensor)',
+          bank: 'LEFT',
+          position: 'REAR',
+          cht: cyl3Cht,
+          egt: cyl3Egt,
+          combustionHealth: hasCylinderMisfire ? 38 : 96,
+          misfireIndication: hasCylinderMisfire,
+          chtDeviation: parseFloat((cyl3Cht - avgCht).toFixed(1)),
+          egtDeviation: cyl3Egt - avgEgt,
+          cylinderHealth: hasCylinderMisfire ? 48 : 96,
+          anomalyScore: hasCylinderMisfire ? 0.88 : 0.03,
+        },
+        cylinder_4: {
+          id: 4,
+          name: 'Cylinder 4 (Right Rear)',
+          bank: 'RIGHT',
+          position: 'REAR',
+          cht: cyl4Cht,
+          egt: cyl4Egt,
+          combustionHealth: 95,
+          misfireIndication: false,
+          chtDeviation: parseFloat((cyl4Cht - avgCht).toFixed(1)),
+          egtDeviation: cyl4Egt - avgEgt,
+          cylinderHealth: 95,
+          anomalyScore: 0.03,
+        },
+        averageCht: avgCht,
+        maxCht,
+        minCht,
+        chtSpread,
+        averageEgt: avgEgt,
+        maxEgt,
+        minEgt,
+        egtSpread,
+        cylinderToCylinderChtDeviation: chtDeviations,
+        cylinderToCylinderEgtDeviation: egtDeviations,
       },
       combustion: {
         cht: {
           cylinders: [cyl1Cht, cyl2Cht, cyl3Cht, cyl4Cht],
           average: avgCht,
-          maxDeviation: maxChtDev,
+          maxDeviation: chtSpread,
           deviations: chtDeviations,
           trend: 0.2,
         },
         egt: {
           cylinders: [cyl1Egt, cyl2Egt, cyl3Egt, cyl4Egt],
           average: avgEgt,
-          maxDeviation: maxEgtDev,
+          maxDeviation: egtSpread,
           deviations: egtDeviations,
           trend: 0.8,
         },
         exhaustTemperature: avgEgt - 85,
         intakeAirTemperature: iatC,
         combustionStatus: hasCylinderMisfire ? 'LEAN_MISFIRE' : hasOverheating ? 'KNOCK_DETECTED' : 'NOMINAL',
+        cylinders: null as any, // assigned below to circular ref cleanly
       },
-      lubrication: {
-        oilPressure: oilPressureBar,
-        oilTemperature: oilTempC,
-        oilLevel: 96.0,
-        oilFlowRate: oilFlowRateLmin,
-        oilPressureTrend: 0.01,
-        oilTemperatureTrend: 0.12,
-        oilPressureDeviation,
-        status: hasOilPressureLoss ? 'LOW_PRESSURE' : oilTempC > 120 ? 'HIGH_TEMP' : 'OPTIMAL',
+      turbocharger: {
+        turbocharger: {
+          turbochargerRpm: turboRpm,
+          compressorPressureBar: mapBar,
+          boostPressureBar: boostDeltaBar,
+          intakeManifoldPressureInHg: mapInHg,
+          turbochargerTemperatureC: parseFloat((88.0 + (engineLoad / 100) * 35.0).toFixed(1)),
+          compressorInletPressureBar: ambientPressBar,
+          compressorOutletPressureBar: mapBar,
+          operatingState: hasWastegateStuck ? 'SURGE' : boostDeltaBar > 0.05 ? 'BOOSTING' : 'SPOOLING',
+          health: hasWastegateStuck || hasTcuFault ? 55 : 94,
+          anomalyState: hasWastegateStuck || hasTcuFault ? 'UNDERBOOST' : 'NOMINAL',
+        },
+        wastegate: {
+          position: wastegatePct,
+          command: wastegateCmd,
+          state: hasWastegateStuck ? 'STUCK_OPEN' : wastegatePct > 90 ? 'OPEN' : wastegatePct < 15 ? 'CLOSED' : 'REGULATING',
+          openingPercent: wastegatePct,
+          error: wastegateCmd - wastegatePct,
+          responseTimeMs: 85,
+          health: hasWastegateStuck ? 45 : 96,
+        },
+        tcu: {
+          status: hasTcuFault ? 'FAULT' : hasWastegateStuck ? 'DEGRADED' : 'ONLINE',
+          operatingMode: hasTcuFault ? 'EMERGENCY_OVERRIDE' : hasWastegateStuck ? 'BOOST_LIMITED' : altMsl > 3000 ? 'ALTITUDE_COMPENSATION' : 'NORMAL',
+          commandPct: wastegateCmd,
+          faultState: hasTcuFault || hasWastegateStuck,
+          boostWarningLamp: hasTcuFault || boostDeltaBar > 0.32,
+          cautionLamp: hasTcuFault || hasWastegateStuck || hasOverheating,
+          communication: hasTcuFault ? 'TIMEOUT' : 'OK',
+          targetBoostBar: parseFloat(((targetMapInHg * 0.0338639) - ambientPressBar).toFixed(2)),
+          actualBoostBar: boostDeltaBar,
+          boostErrorBar: parseFloat((((targetMapInHg * 0.0338639) - ambientPressBar) - boostDeltaBar).toFixed(2)),
+        },
+      },
+      intake: {
+        map: mapInHg,
+        mapBar,
+        airboxPressureInHg: mapInHg,
+        airboxPressureBar: mapBar,
+        airboxTemperatureC: airboxTempC,
+        intakeAirTemperature: iatC,
+        intakeAirPressure: ambientPressBar,
+        airMassFlow,
+        throttlePosition: parseFloat(effectiveThrottle.toFixed(1)),
+        pressureDifferential: boostDeltaBar,
+        wastegatePosition: wastegatePct,
+        intakeRestrictionHpa: parseFloat((2.2 + (airMassFlow / 200) * 1.8).toFixed(1)),
+        airFilterCondition: 'CLEAN',
+        intakeStatus: hasWastegateStuck || hasTcuFault ? 'RESTRICTED' : airboxTempC > 72 ? 'OVERHEAT' : 'NOMINAL',
+        boostPressureDeviation: parseFloat((boostDeltaBar - 0.22).toFixed(2)),
+        intakePressureDeviation: 0.02,
+        intakeTemperatureTrend: 0.1,
+        airflowTrend: 0.4,
+      },
+      carburetors: {
+        carburetor_1: {
+          id: 1,
+          name: 'Bing 64 Carburetor 1 (Cyl 1 & 3)',
+          status: 'NOMINAL',
+          throttleResponse: parseFloat(effectiveThrottle.toFixed(1)),
+          slidePosition: carbSlide1,
+          floatBowlLevel: 'NORMAL',
+          temperatureC: parseFloat((iatC - 2.5).toFixed(1)),
+          mixtureCondition: 'OPTIMAL',
+          faultState: false,
+        },
+        carburetor_2: {
+          id: 2,
+          name: 'Bing 64 Carburetor 2 (Cyl 2 & 4)',
+          status: hasCylinderMisfire || hasCarbImbalance ? 'DEGRADED' : 'NOMINAL',
+          throttleResponse: parseFloat((effectiveThrottle - (hasCylinderMisfire ? 8 : hasCarbImbalance ? 12 : 0)).toFixed(1)),
+          slidePosition: carbSlide2,
+          floatBowlLevel: 'NORMAL',
+          temperatureC: parseFloat((iatC - 2.0).toFixed(1)),
+          mixtureCondition: hasCylinderMisfire || hasCarbImbalance ? 'LEAN' : 'OPTIMAL',
+          faultState: hasCylinderMisfire || hasCarbImbalance,
+        },
+        balance: carbBalance,
+        balanceDeviation: parseFloat((Math.abs(carbSlide1 - carbSlide2)).toFixed(1)),
+        mixtureCondition: hasCylinderMisfire || hasCarbImbalance ? 'LEAN' : 'OPTIMAL',
+        throttleSynchronization: carbBalance,
+        dripTrayDrained: true,
+        status: hasCylinderMisfire || hasCarbImbalance ? 'IMBALANCE' : 'NOMINAL',
+      },
+      fuel_system: {
+        pump_1: {
+          id: 1,
+          role: 'MAIN',
+          state: hasPump1Fail ? 'FAULT' : 'ACTIVE',
+          voltage: hasPump1Fail ? 0.0 : 12.4,
+          currentA: hasPump1Fail ? 0.0 : 1.6,
+          pressureOutputBar: hasPump1Fail ? 0.0 : 3.4,
+          deliveryRateLh: hasPump1Fail ? 0.0 : 115.0,
+          checkValveStatus: 'NORMAL',
+        },
+        pump_2: {
+          id: 2,
+          role: 'STANDBY',
+          state: hasPump1Fail || effectiveThrottle > 95 ? 'ACTIVE' : 'STANDBY',
+          voltage: hasPump1Fail || effectiveThrottle > 95 ? 12.4 : 0.0,
+          currentA: hasPump1Fail || effectiveThrottle > 95 ? 1.5 : 0.0,
+          pressureOutputBar: hasPump1Fail || effectiveThrottle > 95 ? 3.4 : 0.0,
+          deliveryRateLh: hasPump1Fail || effectiveThrottle > 95 ? 115.0 : 0.0,
+          checkValveStatus: 'NORMAL',
+        },
+        fuelFlow: fuelFlowLh,
+        fuelPressure: fuelPressureBar,
+        fuelPressureDeltaOverAirbox: parseFloat((fuelPressureBar - mapBar).toFixed(2)),
+        fuelTemperature: parseFloat((28.5 + (engineLoad / 100) * 4.0).toFixed(1)),
+        fuelQuantity: parseFloat(this.fuelRemainingL.toFixed(1)),
+        fuelRemainingPercent: fuelRemainingPct,
+        fuelConsumption: parseFloat(this.fuelConsumedL.toFixed(1)),
+        fuelConsumptionTrend: 0.05,
+        systemPressure: fuelPressureBar,
+        systemHealth: hasFuelLeak ? 42 : hasPump1Fail ? 68 : 96,
+        fuelStarvationIndication: this.fuelRemainingL < 4.0,
+        fuelPressureDeviation: parseFloat((fuelPressureBar - (mapBar + 0.25)).toFixed(2)),
+        pumpImbalance: hasPump1Fail ? 1.0 : 0.05,
+        status: hasFuelLeak ? 'LEAK_DETECTED' : hasPump1Fail || fuelPressureBar < 2.5 ? 'PRESSURE_DROP' : 'NOMINAL',
       },
       fuel: {
         fuelFlow: fuelFlowLh,
@@ -793,21 +1146,28 @@ export class SimulationEngine {
         fuelRemainingPercent: fuelRemainingPct,
         fuelConsumption: parseFloat(this.fuelConsumedL.toFixed(1)),
         fuelConsumptionTrend: 0.05,
-        injectionTiming: injectionTimingBtdc,
-        injectionDuration: injectionDurationMs,
+        carburetorFeedRate: fuelFlowLh,
+        mixtureRatio: lambdaVal,
         status: hasFuelLeak ? 'LEAK_DETECTED' : fuelPressureBar < 2.5 ? 'PRESSURE_DROP' : 'NOMINAL',
       },
-      intake: {
-        map: mapInHg,
-        mapBar,
-        intakeAirTemperature: iatC,
-        intakeAirPressure: parseFloat((ambientPressInHg * 0.0338639).toFixed(2)),
-        airMassFlow,
-        throttlePosition: parseFloat(effectiveThrottle.toFixed(1)),
-        pressureDifferential: boostDeltaBar,
-        wastegatePosition: wastegatePct,
-      },
       ignition: {
+        ignition_A: {
+          circuit: 'A',
+          status: hasIgnAFail ? 'FAULT' : hasCylinderMisfire ? 'DEGRADED' : 'ACTIVE',
+          health: hasIgnAFail ? 12 : hasCylinderMisfire ? 62 : 98,
+          voltage: hasIgnAFail ? 0.0 : 13.8,
+          timingDegBtdc: ignitionTimingDeg,
+          controlsPlugs: 'Top Plugs (Cyl 1,2) + Lower Plugs (Cyl 3,4)',
+        },
+        ignition_B: {
+          circuit: 'B',
+          status: hasIgnBFail ? 'FAULT' : 'ACTIVE',
+          health: hasIgnBFail ? 12 : 98,
+          voltage: hasIgnBFail ? 0.0 : 13.8,
+          timingDegBtdc: ignitionTimingDeg,
+          controlsPlugs: 'Top Plugs (Cyl 3,4) + Lower Plugs (Cyl 1,2)',
+        },
+        dualIgnitionState: hasIgnAFail && hasIgnBFail ? 'IGNITION_A_FAULT' : hasIgnAFail ? 'IGNITION_B_ONLY' : hasIgnBFail ? 'IGNITION_A_ONLY' : hasCylinderMisfire ? 'IGNITION_A_FAULT' : 'BOTH_ACTIVE',
         ignitionTiming: ignitionTimingDeg,
         ignitionAdvance: ignitionAdvanceDeg,
         sparkPlugStatus: {
@@ -815,10 +1175,143 @@ export class SimulationEngine {
           circuitB: sparkPlugB,
         },
         ignitionVoltage: 13.8,
-        primaryIgnitionState: hasCylinderMisfire ? 'DEGRADED' : 'ACTIVE',
-        secondaryIgnitionState: 'ACTIVE',
+        primaryIgnitionState: hasIgnAFail ? 'OFF' : hasCylinderMisfire ? 'DEGRADED' : 'ACTIVE',
+        secondaryIgnitionState: hasIgnBFail ? 'OFF' : 'ACTIVE',
         misfireCount: hasCylinderMisfire ? 18 : 0,
         misfireDetected: hasCylinderMisfire,
+        dualIgnitionConsistency: hasIgnAFail || hasIgnBFail ? 48.0 : hasCylinderMisfire ? 78.5 : 99.4,
+      },
+      cooling: {
+        architecture: 'LIQUID_HEADS_AIR_CYLINDERS',
+        coolantTemperature: coolantTempC,
+        coolantPressure: coolantPressureBar,
+        coolantFlow: coolantFlowLmin,
+        radiatorTemperature: radiatorTempC,
+        coolingAirTemperature: parseFloat((this.ambientTemp + 2.5).toFixed(1)),
+        coolingAirFlow: parseFloat((this.actualSpeed * 1.15).toFixed(1)),
+        status: hasOverheating || hasCoolantRise ? 'OVERHEAT' : 'NOMINAL',
+        liquidCooling: {
+          coolantTemperature: coolantTempC,
+          coolantPressure: coolantPressureBar,
+          coolantFlow: coolantFlowLmin,
+          cylinderHeadTemperature: maxCht,
+          radiatorTemperature: radiatorTempC,
+          coolantLevelPercent: 98.0,
+          radiatorHeatDissipationKw: parseFloat(((engineLoad / 100) * 30.0).toFixed(1)),
+          status: hasOverheating || hasCoolantRise ? 'OVERHEAT' : 'NOMINAL',
+          health: hasOverheating || hasCoolantRise ? 42 : hasReducedCoolantFlow ? 60 : 96,
+        },
+        ramAirCooling: {
+          coolingAirTemperature: parseFloat((this.ambientTemp + 2.5).toFixed(1)),
+          coolingAirPressureHpa: parseFloat((ambientPressHpa + 12.0).toFixed(1)),
+          coolingAirFlow: parseFloat((this.actualSpeed * 1.15).toFixed(1)),
+          ambientTemperature: this.ambientTemp,
+          cylinderWallTemperature: cylinderWallTempC,
+          coolingEffectiveness: parseFloat((100 - (cylinderWallTempC / 200.0) * 20).toFixed(1)),
+        },
+        coolingEfficiency: hasOverheating || hasCoolantRise ? 48.0 : hasReducedCoolantFlow ? 62.0 : 94.5,
+        temperatureDeviation: parseFloat((coolantTempC - 88.0).toFixed(1)),
+        overTemperatureCondition: hasOverheating || hasCoolantRise || maxCht > 135,
+        coolingAnomaly: hasOverheating || hasCoolantRise || hasReducedCoolantFlow,
+      },
+      oil_system: {
+        oil_tank: {
+          levelPercent: 94.0,
+          quantityLiters: 2.8,
+          temperatureC: parseFloat((oilTempC - 4.0).toFixed(1)),
+          ventLinePressureBar: 0.05,
+        },
+        oil_pump: {
+          status: hasOilPressureLoss ? 'LOW_PRESSURE' : 'OPTIMAL',
+          pressureBar: oilPressureBar,
+          flowRateLmin: oilFlowRateLmin,
+          vacuumSuctionBar: 0.12,
+          crankcasePressureBar: 0.18,
+        },
+        oil_filter: {
+          condition: 'NORMAL',
+          differentialPressureBar: 0.22,
+        },
+        lubrication_circuit: {
+          oilTemperature: oilTempC,
+          oilPressureTrend: 0.01,
+          oilTemperatureTrend: 0.12,
+          oilPressureDeviation,
+          status: hasOilPressureLoss ? 'LOW_PRESSURE' : oilTempC > 120 || hasHighOilTemp ? 'HIGH_TEMP' : 'OPTIMAL',
+          health: hasOilPressureLoss ? 18 : hasHighOilTemp ? 38 : hasOilDegrade ? 54 : 95,
+        },
+      },
+      lubrication: {
+        oilPressure: oilPressureBar,
+        oilTemperature: oilTempC,
+        oilLevel: 94.0,
+        oilFlowRate: oilFlowRateLmin,
+        oilPressureTrend: 0.01,
+        oilTemperatureTrend: 0.12,
+        oilPressureDeviation,
+        status: hasOilPressureLoss ? 'LOW_PRESSURE' : oilTempC > 120 || hasHighOilTemp ? 'HIGH_TEMP' : 'OPTIMAL',
+      },
+      exhaust: {
+        egtAverage: avgEgt,
+        egtPerCylinder: [cyl1Egt, cyl2Egt, cyl3Egt, cyl4Egt],
+        egtMaxDeviation: egtSpread,
+        exhaustPressure: parseFloat((1.18 + (engineLoad / 100) * 0.22 + (hasExhaustRestrict ? 0.65 : 0)).toFixed(2)),
+        exhaustFlow: parseFloat((airMassFlow + fuelFlowLh * 0.74).toFixed(1)),
+        exhaustTemperature: avgEgt - 78,
+        exhaustEnergyIndex: parseFloat(((powerKw / 84.5) * (engineLoad / 100)).toFixed(2)),
+        exhaustSystemHealth: hasExhaustRestrict ? 35 : hasOverheating ? 65 : 96,
+        exhaustAnomaly: hasExhaustRestrict || hasEgtImbalance || hasOverheating || egtSpread > 65,
+      },
+      gearbox: {
+        engine_input_rpm: Math.round(actualEngineRpm),
+        propeller_output_rpm: propRpm,
+        reduction_ratio: GEAR_REDUCTION_RATIO,
+        gearbox_temperature: hasGearboxOverheat ? 118.5 : hasGearboxVib ? 104.5 : parseFloat((oilTempC - 6.0).toFixed(1)),
+        gearbox_vibration: hasGearboxVib ? 6.42 : parseFloat((vibRms * 0.75).toFixed(2)),
+        gearbox_torque: parseFloat((torque * GEAR_REDUCTION_RATIO).toFixed(1)),
+        gearbox_health: hasGearboxVib ? 42 : hasGearboxOverheat ? 55 : hasVibAnomaly ? 68 : 96,
+        overloadClutchStatus: hasGearboxVib ? 'SLIPPING' : 'ENGAGED',
+        torsionalDamperCondition: hasGearboxVib ? 'INSPECT' : hasVibAnomaly ? 'WORN' : 'NORMAL',
+        lubricationStatus: 'OPTIMAL',
+      },
+      propeller: {
+        propellerRpm: propRpm,
+        propellerTorqueNm: parseFloat((torque * GEAR_REDUCTION_RATIO).toFixed(1)),
+        propellerPitchDeg: parseFloat((18.5 + (effectiveThrottle / 115) * 6.5).toFixed(1)),
+        propellerLoadPct: Math.round(engineLoad),
+        propellerThrustN: Math.round(powerKw * 28.5),
+        propellerEfficiencyPct: 86.4,
+        propellerStatus: 'NOMINAL',
+        governorStatus: 'ACTIVE',
+        configuration: 'VERSION_3_GOVERNOR',
+      },
+      starter: {
+        starterState: actualEngineRpm > 400 ? 'RUNNING' : 'OFF',
+        starterCurrentA: 0.0,
+        starterVoltageV: 12.6,
+        engineCrankingRpm: 0,
+        startAttemptCount: 1,
+        startDurationSec: 1.8,
+        successfulStart: true,
+        failedStart: false,
+        startFault: false,
+        engineStartTimeIso: '2026-09-28T14:15:00Z',
+      },
+      electrical: {
+        batteryVoltage: hasGenFail || hasAltFail ? 24.1 : 28.4,
+        batteryCurrent: alternatorCurrent,
+        batteryTemperature: 34.0,
+        batterySoc: 94.0,
+        integratedGeneratorStatus: hasGenFail ? 'OFFLINE' : 'ACTIVE',
+        integratedGeneratorPowerW: hasGenFail ? 0 : parseFloat(((actualEngineRpm / 5800) * 250).toFixed(0)),
+        externalAlternatorFitted: true,
+        externalAlternatorStatus: hasAltFail ? 'OFFLINE' : 'ACTIVE',
+        externalAlternatorVoltage: hasAltFail ? 0.0 : 14.4,
+        externalAlternatorCurrent: alternatorCurrent,
+        electricalPower: electricalPowerW,
+        electricalLoad: electricalLoadPct,
+        starterStatus: 'DISENGAGED',
+        health: hasGenFail || hasAltFail ? 45 : 96,
       },
       mechanical: {
         rpm: Math.round(actualEngineRpm),
@@ -831,7 +1324,7 @@ export class SimulationEngine {
         engineCycleCount: this.engineCycles,
         componentHealth: {
           crankshaft: hasVibAnomaly ? 78 : 94,
-          bearings: hasOilPressureLoss ? 68 : 91,
+          bearings: hasBearingDegrade ? 38 : hasOilPressureLoss ? 68 : 91,
           pistons: hasOverheating ? 72 : 92,
           valvetrain: hasCylinderMisfire ? 74 : 93,
         },
@@ -848,63 +1341,55 @@ export class SimulationEngine {
         vibrationBaseline: vibBaseline,
         vibrationDeviation: vibDeviation,
       },
-      electrical: {
-        batteryVoltage: 28.4,
-        batteryCurrent: alternatorCurrent,
-        batteryTemperature: 34.0,
-        batterySoc: 94.0,
-        alternatorVoltage,
-        alternatorCurrent,
-        electricalPower: electricalPowerW,
-        electricalLoad: electricalLoadPct,
-        starterStatus: 'DISENGAGED',
-      },
-      cooling: {
-        architecture: 'LIQUID_HEADS_AIR_CYLINDERS',
-        coolantTemperature: coolantTempC,
-        coolantPressure: coolantPressureBar,
-        coolantFlow: coolantFlowLmin,
-        radiatorTemperature: radiatorTempC,
-        coolingAirTemperature: parseFloat((this.ambientTemp + 2.5).toFixed(1)),
-        coolingAirFlow: parseFloat((this.actualSpeed * 1.15).toFixed(1)),
-        status: hasOverheating ? 'OVERHEAT' : 'NOMINAL',
-      },
-      exhaust: {
-        egtAverage: avgEgt,
-        egtPerCylinder: [cyl1Egt, cyl2Egt, cyl3Egt, cyl4Egt],
-        egtMaxDeviation: maxEgtDev,
-        exhaustPressure: parseFloat((1.18 + (engineLoad / 100) * 0.22).toFixed(2)),
-        exhaustFlow: parseFloat((airMassFlow + fuelFlowLh * 0.74).toFixed(1)),
-        exhaustTemperature: avgEgt - 78,
-      },
       environment: {
-        altitude: parseFloat((APP_CONFIG.baseCoordinates.altMsl + this.droneZ).toFixed(1)),
+        altitude: altMsl,
         airspeed: parseFloat((this.actualSpeed + effectiveWind * 0.2).toFixed(1)),
         oat: this.ambientTemp,
         ambientTemperature: this.ambientTemp,
-        ambientPressure: parseFloat((1008.4 - (this.droneZ / 8.5)).toFixed(1)),
+        ambientPressure: ambientPressHpa,
         humidity: 62.0,
         airDensity: 1.225,
         windSpeed: parseFloat(effectiveWind.toFixed(1)),
         windDirection: Math.round(this.windDirection),
+        densityAltitudeM,
+        criticalAltitudeM: 4800,
+        flightPhase,
       },
       health: {
         overallEngineHealth: healthIndex,
         engineHealthIndex: healthIndex,
         degradationIndex,
         anomalyScore,
-        faultState: hasOverheating || hasOilPressureLoss || hasVibAnomaly ? 'FAULT' : hasCylinderMisfire || hasFuelLeak || hasWastegateStuck ? 'DEGRADED' : 'HEALTHY',
+        faultState: hasCriticalFault ? 'FAULT' : hasWarningFault ? 'DEGRADED' : 'HEALTHY',
         faultType: this.getActiveFaults()[0]?.label || null,
-        faultSeverity: hasOverheating || hasOilPressureLoss ? 'CRITICAL' : hasVibAnomaly || hasCylinderMisfire ? 'HIGH' : hasFuelLeak || hasWastegateStuck ? 'MEDIUM' : 'NONE',
-        healthTrend: hasOverheating || hasOilPressureLoss ? 'DEGRADING' : 'STABLE',
+        faultSeverity: hasCriticalFault ? 'CRITICAL' : hasWarningFault ? 'HIGH' : 'NONE',
+        healthTrend: hasCriticalFault ? 'DEGRADING' : 'STABLE',
+        components: {
+          overall: { health: healthIndex, status: healthIndex > 80 ? 'NOMINAL' : healthIndex > 50 ? 'MONITOR' : 'FAULT', source: 'MODEL_DERIVED', confidence: 0.94 },
+          cylinders: { health: hasOverheating || hasCoolantRise ? 54 : hasCylinderMisfire ? 72 : 95, status: hasOverheating || hasCoolantRise ? 'FAULT' : 'NOMINAL', source: 'SENSOR_DERIVED', confidence: 0.98 },
+          turbocharger: { health: hasWastegateStuck || hasTcuFault || hasTurboOverboost ? 55 : 94, status: hasWastegateStuck || hasTcuFault || hasTurboOverboost ? 'FAULT' : 'NOMINAL', source: 'SENSOR_DERIVED', confidence: 0.92 },
+          wastegate: { health: hasWastegateStuck || hasTurboOverboost ? 45 : 96, status: hasWastegateStuck || hasTurboOverboost ? 'FAULT' : 'NOMINAL', source: 'RULE_BASED', confidence: 0.96 },
+          tcu: { health: hasTcuFault ? 35 : hasWastegateStuck ? 58 : 98, status: hasTcuFault ? 'FAULT' : hasWastegateStuck ? 'MONITOR' : 'NOMINAL', source: 'RULE_BASED', confidence: 0.95 },
+          fuel_system: { health: hasFuelLeak ? 42 : hasPump1Fail || hasPump2Fail ? 68 : 96, status: hasFuelLeak || hasPump1Fail ? 'FAULT' : 'NOMINAL', source: 'SENSOR_DERIVED', confidence: 0.95 },
+          carburetors: { health: hasCarbImbalance ? 55 : hasCylinderMisfire ? 74 : 96, status: hasCarbImbalance ? 'FAULT' : hasCylinderMisfire ? 'MONITOR' : 'NOMINAL', source: 'MODEL_DERIVED', confidence: 0.88 },
+          ignition: { health: hasIgnAFail || hasIgnBFail ? 22 : hasCylinderMisfire ? 62 : 98, status: hasIgnAFail || hasIgnBFail || hasCylinderMisfire ? 'FAULT' : 'NOMINAL', source: 'SENSOR_DERIVED', confidence: 0.99 },
+          cooling: { health: hasOverheating || hasCoolantRise ? 42 : hasReducedCoolantFlow ? 62 : 96, status: hasOverheating || hasCoolantRise ? 'FAULT' : 'NOMINAL', source: 'SENSOR_DERIVED', confidence: 0.96 },
+          lubrication: { health: hasOilPressureLoss ? 18 : hasHighOilTemp ? 42 : 95, status: hasOilPressureLoss ? 'FAULT' : 'NOMINAL', source: 'SENSOR_DERIVED', confidence: 0.99 },
+          exhaust: { health: hasExhaustRestrict ? 35 : hasOverheating ? 65 : 96, status: hasExhaustRestrict ? 'FAULT' : hasOverheating ? 'MONITOR' : 'NOMINAL', source: 'SENSOR_DERIVED', confidence: 0.94 },
+          gearbox: { health: hasGearboxVib ? 38 : hasGearboxOverheat ? 55 : hasVibAnomaly ? 68 : 96, status: hasGearboxVib || hasGearboxOverheat ? 'FAULT' : hasVibAnomaly ? 'MONITOR' : 'NOMINAL', source: 'RULE_BASED', confidence: 0.90 },
+          electrical: { health: hasGenFail || hasAltFail ? 45 : 96, status: hasGenFail || hasAltFail ? 'FAULT' : 'NOMINAL', source: 'SENSOR_DERIVED', confidence: 0.95 },
+          starter: { health: 98, status: 'NOMINAL', source: 'RULE_BASED', confidence: 0.92 },
+        },
         componentHealth: {
-          cylinder: hasOverheating ? 72 : 93,
-          bearing: hasOilPressureLoss ? 68 : 91,
-          lubrication: hasOilPressureLoss ? 62 : 95,
-          fuelSystem: hasFuelLeak ? 70 : 94,
-          ignitionSystem: hasCylinderMisfire ? 74 : 96,
-          coolingSystem: hasOverheating ? 65 : 95,
-          electricalSystem: 94,
+          cylinder: hasOverheating || hasCoolantRise ? 54 : 94,
+          bearing: hasBearingDegrade ? 38 : hasOilPressureLoss ? 68 : 91,
+          lubrication: hasOilPressureLoss ? 18 : hasHighOilTemp ? 42 : 95,
+          fuelSystem: hasFuelLeak ? 42 : hasPump1Fail ? 68 : 96,
+          ignitionSystem: hasIgnAFail || hasIgnBFail ? 22 : hasCylinderMisfire ? 62 : 98,
+          coolingSystem: hasOverheating || hasCoolantRise ? 42 : 96,
+          electricalSystem: hasGenFail || hasAltFail ? 45 : 96,
+          turbocharger: hasWastegateStuck || hasTcuFault || hasTurboOverboost ? 55 : 94,
+          gearbox: hasGearboxVib ? 38 : hasGearboxOverheat ? 55 : hasVibAnomaly ? 68 : 96,
         },
       },
       maintenance: {
@@ -913,18 +1398,20 @@ export class SimulationEngine {
         engineCycleCount: this.engineCycles,
         cyclesSinceMaintenance: 42,
         operatingHoursSinceMaintenance: 120.4,
+        hoursSinceOverhaul: parseFloat(this.engineHours.toFixed(1)),
+        tboReferenceHours: 2000,
         lastMaintenanceDate: '2026-08-15',
         lastMaintenanceHours: 1300.0,
         lastOverhaulDate: 'Depot Zero-Hour Baseline',
         isSimulatedData: true,
         replacementHistory: [
-          { component: 'Rotax High-Pressure Oil Filter', atHours: 1300.0, date: '2026-08-15', reason: 'Scheduled 100-hour service' },
+          { component: 'Rotax High-Pressure Oil Filter (Part 825701)', atHours: 1300.0, date: '2026-08-15', reason: 'Scheduled 100-hour service' },
           { component: 'NGK DCPR8E Spark Plugs (Set of 8)', atHours: 1200.0, date: '2026-07-02', reason: 'Scheduled replacement interval' },
-          { component: 'Turbo Wastegate Actuator Diaphragm', atHours: 1000.0, date: '2026-04-18', reason: 'Preventive service bulletin' },
+          { component: 'Turbo Wastegate Servo Cable & Bellcrank', atHours: 1000.0, date: '2026-04-18', reason: 'Preventive service bulletin' },
         ],
         faultHistory: [
-          { timestamp: '14:20:11', code: 'E-CHT-02', description: 'Transient CHT elevation on Cylinder 1 during climb', resolved: true },
-          { timestamp: '09:15:44', code: 'E-MAP-01', description: 'Wastegate calibration self-test passed', resolved: true },
+          { timestamp: '14:20:11', code: 'E-CHT-02', description: 'Transient CHT elevation on Cylinder 2 during climb', resolved: true },
+          { timestamp: '09:15:44', code: 'E-MAP-01', description: 'TCU wastegate calibration self-test passed', resolved: true },
         ],
         maintenanceEvents: [
           { date: '2026-08-15', type: '100-Hour Routine Inspection', description: 'Compression check: 8.8-9.0 bar across all 4 cylinders. Oil change with AeroShell 4T.', technician: 'MCC-AIRWORTHINESS #44' },
@@ -960,6 +1447,7 @@ export class SimulationEngine {
           : 'NOMINAL',
         maintenanceThresholdHours: 50.0,
         isSimulatedPrediction: true,
+        rulMethodology: 'SIMULATED / DEMONSTRATION RUL',
         rulHistory: hasOilPressureLoss
           ? [580, 420, 240, 110, 45, 18, 6, 2.8]
           : hasOverheating
@@ -968,13 +1456,18 @@ export class SimulationEngine {
         componentRul: {
           corePowerplantHours: hasOilPressureLoss ? 2.8 : hasOverheating ? 14.5 : 580.0,
           turbochargerHours: hasWastegateStuck ? 82.0 : 420.0,
+          reductionGearboxHours: hasVibAnomaly ? 45.0 : 580.0,
           oilPumpHours: hasOilPressureLoss ? 1.2 : 580.0,
+          carburetorsHours: 340.0,
+          ignitionSystemHours: hasCylinderMisfire ? 65.0 : 480.0,
+          fuelPumpsHours: hasFuelLeak ? 35.0 : 520.0,
           alternatorHours: 480.0,
-          fuelInjectorsHours: hasFuelLeak ? 18.0 : 340.0,
+          fuelInjectorsHours: hasFuelLeak ? 18.0 : 340.0, // legacy backward compatibility
         },
       },
       derived: {
         powerToFuelEfficiency: parseFloat((powerKw / fuelFlowLh).toFixed(2)),
+        brakeSpecificFuelConsumptionGkwh: bsfc,
         chtDeviations,
         egtDeviations,
         rpmError,
@@ -982,14 +1475,20 @@ export class SimulationEngine {
         vibrationDeviation: vibDeviation,
         fuelConsumptionTrend: 0.04,
         temperatureTrend: 0.18,
+        expectedPowerKw: parseFloat(((144.0 * (targetRpm * 2 * Math.PI / 60)) / 1000 * 0.72).toFixed(1)),
+        powerDeviationKw: parseFloat((powerKw - ((144.0 * (targetRpm * 2 * Math.PI / 60)) / 1000 * 0.72)).toFixed(1)),
       },
     };
+
+    // Link circular cylinders reference inside combustion
+    engine.combustion.cylinders = engine.cylinders;
 
     // Buffer historical engine time-series every 1 second
     if (Math.floor(this.simTime) !== Math.floor(this.simTime - dt)) {
       this.engineHistory.push({
         timeSec: Math.round(this.simTime),
         rpm: Math.round(actualEngineRpm),
+        propRpm,
         throttle: parseFloat(effectiveThrottle.toFixed(1)),
         engineLoad: Math.round(engineLoad),
         torque,
@@ -998,11 +1497,13 @@ export class SimulationEngine {
         egtAvg: avgEgt,
         oilPressure: oilPressureBar,
         oilTemp: oilTempC,
+        coolantTemp: coolantTempC,
         fuelFlow: fuelFlowLh,
         fuelPressure: fuelPressureBar,
         map: mapInHg,
+        boostBar: boostDeltaBar,
+        wastegatePct,
         vibrationRms: vibRms,
-        coolantTemp: coolantTempC,
         ambientTemp: this.ambientTemp,
         altitude: parseFloat((APP_CONFIG.baseCoordinates.altMsl + this.droneZ).toFixed(1)),
         electricalPower: electricalPowerW,
@@ -1059,7 +1560,7 @@ export class SimulationEngine {
         temperature: parseFloat(this.batteryTemp.toFixed(1)),
         remainingFlightTimeMinutes: Math.round(remainingMinutes),
         consumptionRate: parseFloat((totalCurrent * 60).toFixed(0)), // mAh/min approx
-        cellVoltages: this.cellVoltages.map((_, i) => (hasBatterySag && i === 3 ? 3.12 : parseFloat((this.batteryVoltage / 6).toFixed(2)))),
+        cellVoltages: this.cellVoltages.map(() => parseFloat((this.batteryVoltage / 6).toFixed(2))),
         capacityMah: this.batteryCapacityMah,
         remainingCapacityMah: Math.round((this.batteryPct / 100) * this.batteryCapacityMah),
       },
@@ -1068,8 +1569,8 @@ export class SimulationEngine {
         motors,
         totalCurrent: parseFloat(totalCurrent.toFixed(1)),
         totalPower: parseFloat(totalPower.toFixed(1)),
-        avgMotorTemp: parseFloat(((m1Temp + m2Temp + m3Temp + m4Temp) / 4).toFixed(1)),
-        rotorBalance: hasMotor1Fail ? 32 : hasMotor3Degrade ? 68 : 98,
+        avgMotorTemp: parseFloat((motors.reduce((sum, m) => sum + m.temperature, 0) / 4).toFixed(1)),
+        rotorBalance: 98,
       },
 
       flightControl: {
@@ -1132,9 +1633,9 @@ export class SimulationEngine {
           latitude: parseFloat(currentLat.toFixed(6)),
           longitude: parseFloat(currentLng.toFixed(6)),
           altitude: parseFloat((APP_CONFIG.baseCoordinates.altMsl + this.droneZ).toFixed(1)),
-          accuracyM: hasGpsLoss ? 99.0 : 0.8,
+          accuracyM: 0.8,
           satelliteCount: gpsSats,
-          fixType: hasGpsLoss ? 'No Fix' : '3D Fix',
+          fixType: '3D Fix',
           hdop: gpsHdop,
         },
         barometer: {
@@ -1149,9 +1650,9 @@ export class SimulationEngine {
           heading: Math.round(this.actualYaw),
         },
         esc: {
-          motorTemps: [m1Temp, m2Temp, m3Temp, m4Temp].map((t) => parseFloat(t.toFixed(1))),
+          motorTemps: motors.map((m) => m.temperature),
           busVoltage: parseFloat(this.batteryVoltage.toFixed(1)),
-          rpmReadouts: [m1Rpm, m2Rpm, m3Rpm, m4Rpm].map((r) => Math.round(r)),
+          rpmReadouts: motors.map((m) => m.rpm),
         },
       },
 

@@ -5,7 +5,7 @@ import { RULStatus } from '../../types/prediction';
 export const RemainingUsefulLifeCard: React.FC = () => {
   const { predictions } = useTelemetry();
   const rulState = predictions?.rul;
-  const [filter, setFilter] = useState<'ALL' | 'POWERPLANT' | 'PROPULSION' | 'ESC' | 'BATTERY'>('ALL');
+  const [filter, setFilter] = useState<'ALL' | 'POWERPLANT' | 'GEARBOX_PROP' | 'SUBSYSTEMS' | 'BATTERY'>('ALL');
 
   if (!rulState) {
     return (
@@ -30,12 +30,27 @@ export const RemainingUsefulLifeCard: React.FC = () => {
         c.subsystem === 'Engine Core' ||
         c.subsystem === 'Turbocharger' ||
         c.subsystem === 'Lubrication Pump' ||
+        c.subsystem === 'Bearings'
+      );
+    }
+    if (filter === 'GEARBOX_PROP') {
+      return (
+        c.subsystem === 'Reduction Gearbox' ||
+        c.subsystem === 'Propulsion'
+      );
+    }
+    if (filter === 'SUBSYSTEMS') {
+      return (
+        c.subsystem === 'Carburetors' ||
+        c.subsystem === 'Ignition System' ||
+        c.subsystem === 'Fuel System' ||
+        c.subsystem === 'Cooling System' ||
         c.subsystem === 'Alternator'
       );
     }
-    if (filter === 'PROPULSION') return c.subsystem === 'Propulsion';
-    if (filter === 'ESC') return c.subsystem === 'ESC';
-    if (filter === 'BATTERY') return c.subsystem === 'Battery';
+    if (filter === 'BATTERY') {
+      return c.subsystem === 'Battery' || c.subsystem === 'ESC';
+    }
     return true;
   });
 
@@ -68,18 +83,18 @@ export const RemainingUsefulLifeCard: React.FC = () => {
 
   return (
     <div className="bg-[#faf8f5] border border-[#ddd5c7] rounded-2xl flex flex-col select-none shadow-xs overflow-hidden">
-      {/* Header bar */}
+      {/* Header bar with Mandatory SIMULATED / DEMONSTRATION RUL Badge */}
       <div className="px-4 py-3 border-b border-[#e5dfd3] flex items-center justify-between bg-[#efeae2]">
         <div className="flex items-center space-x-2">
           <span className="text-[11px] font-mono font-bold tracking-wide text-[#1c1917]">
-            Remaining Useful Life (RUL) & Prognostics
+            RUL Prognostics · Rotax 914 F
           </span>
-          <span className="text-[9px] font-mono text-[#786c5f] bg-white px-2 py-0.5 rounded-full border border-[#ded5c7]">
-            ISO-13374
+          <span className="text-[8.5px] font-mono font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-full border border-amber-300">
+            SIMULATED / DEMONSTRATION RUL
           </span>
         </div>
         <div className="flex items-center space-x-2 text-[10px] font-mono">
-          <span className="text-[#786c5f]">Health Index:</span>
+          <span className="text-[#786c5f]">Health:</span>
           <span
             className={`font-bold px-2 py-0.5 text-[10px] rounded-full border ${
               fleetAirworthinessScore < 40
@@ -96,7 +111,7 @@ export const RemainingUsefulLifeCard: React.FC = () => {
 
       {/* Critical Path Bottleneck Banner */}
       <div
-        className={`px-4 py-2.5 text-[11px] border-b flex items-center justify-between ${
+        className={`px-4 py-2 text-[11px] border-b flex items-center justify-between ${
           isCriticalPathAlert
             ? 'bg-[#fee2e2]/70 border-[#fca5a5] text-[#b91c1c]'
             : 'bg-[#f8f5ee] border-[#e5dfd3] text-[#5c544d]'
@@ -121,9 +136,12 @@ export const RemainingUsefulLifeCard: React.FC = () => {
             </strong>
           </span>
           <span className="text-[#ded5c7]">|</span>
-          <span>
-            Due:{' '}
-            <strong className="text-[#1c1917]">{nextScheduledMaintenanceHours.toFixed(1)} hrs</strong>
+          <span className="text-[9px] text-[#786c5f]">
+            100h INSP: <strong className="text-[#1c1917]">{nextScheduledMaintenanceHours}h</strong>
+          </span>
+          <span className="text-[#ded5c7]">|</span>
+          <span className="text-[9px] text-[#786c5f]">
+            TBO REF: <strong className="text-[#1c1917]">2,000h</strong>
           </span>
         </div>
       </div>
@@ -131,17 +149,23 @@ export const RemainingUsefulLifeCard: React.FC = () => {
       {/* Filter Tabs */}
       <div className="px-4 pt-2.5 pb-2 flex items-center justify-between border-b border-[#e5dfd3] text-[10px] bg-[#faf8f5]">
         <div className="flex items-center space-x-1.5 overflow-x-auto">
-          {(['ALL', 'POWERPLANT', 'PROPULSION', 'ESC', 'BATTERY'] as const).map((tab) => (
+          {([
+            { id: 'ALL', label: 'ALL COMPONENTS' },
+            { id: 'POWERPLANT', label: '914F ENGINE' },
+            { id: 'GEARBOX_PROP', label: 'GEARBOX & PROP' },
+            { id: 'SUBSYSTEMS', label: 'CARB / IGN / COOL' },
+            { id: 'BATTERY', label: 'BMS & AVIONICS' },
+          ] as const).map((tab) => (
             <button
-              key={tab}
-              onClick={() => setFilter(tab)}
-              className={`px-2.5 py-0.5 text-[9px] font-mono font-bold rounded-full transition-all whitespace-nowrap ${
-                filter === tab
+              key={tab.id}
+              onClick={() => setFilter(tab.id)}
+              className={`px-2 py-0.5 text-[8.5px] font-mono font-bold rounded-full transition-all whitespace-nowrap ${
+                filter === tab.id
                   ? 'bg-white text-[#d8533c] border border-[#d8d0c2] shadow-xs'
                   : 'text-[#786c5f] hover:text-[#1c1917]'
               }`}
             >
-              {tab}
+              {tab.label}
             </button>
           ))}
         </div>
